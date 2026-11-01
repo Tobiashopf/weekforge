@@ -1,0 +1,47 @@
+:root {
+  --bg: #f6f5f1; --card: #ffffff; --ink: #1d1d1b; --muted: #6b6b66;
+  --line: #e2e0d8; --accent: #2f6f4f; --accent-soft: #d9ebe1;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151614; --card: #1f201d; --ink: #ecebe6; --muted: #9a9a93;
+          --line: #33342f; --accent: #6cc196; --accent-soft: #24382d; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.topbar { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.brand { font-weight: 800; color: var(--ink); text-decoration: none; letter-spacing: .02em; }
+
+.week-head { display: flex; align-items: center; gap: 12px; }
+.week-head h1 { font-size: 1.3rem; margin: 0; }
+.nav { color: var(--ink); text-decoration: none; font-size: 1.5rem; padding: 0 8px; }
+
+.focus { margin: 12px 0 20px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.focus label { font-weight: 600; }
+
+input { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line);
+        border-radius: 8px; padding: 6px 10px; width: 100%; }
+.focus input { width: auto; flex: 1; min-width: 180px; }
+
+.layout { display: grid; grid-template-columns: 1fr 300px; gap: 16px; }
+@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
+
+.agenda { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.day, .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.side { display: flex; flex-direction: column; gap: 12px; }
+h2 { font-size: .95rem; margin: 0 0 8px; }
+h2 small { color: var(--muted); font-weight: 400; }
+
+.tasks { list-style: none; margin: 0 0 8px; padding: 0; }
+.task { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.task.done span { text-decoration: line-through; color: var(--muted); }
+.check { width: 22px; height: 22px; flex: none; border: 2px solid var(--ink); border-radius: 4px;
+         background: transparent; color: var(--accent); font-weight: 900; cursor: pointer; padding: 0; line-height: 1; }
+.task.done .check { border-color: var(--accent); background: var(--accent-soft); }
+
+.bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.perf dl { margin: 10px 0 0; display: grid; gap: 4px; }
+.perf dl div { display: flex; justify-content: space-between; }
+.perf dt { color: var(--muted); } .perf dd { margin: 0; font-weight: 600; }

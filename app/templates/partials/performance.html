@@ -1,0 +1,11 @@
+<section id="performance" class="card perf"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <h2>Performance da semana</h2>
+  <div class="bar" role="img" aria-label="{{ perf.done_pct }}% concluído">
+    <span style="width: {{ perf.done_pct }}%"></span>
+  </div>
+  <dl>
+    <div><dt>✓ Feitas</dt><dd>{{ perf.done }} ({{ perf.done_pct }}%)</dd></div>
+    <div><dt>✗ Pendentes</dt><dd>{{ perf.pending }} ({{ perf.pending_pct }}%)</dd></div>
+    <div><dt>Total</dt><dd>{{ perf.total }}</dd></div>
+  </dl>
+</section>

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Semana de {{ week.start_date.strftime('%d/%m/%Y') }} · Weekforge{% endblock %}
+{% block content %}
+<section class="week-head">
+  <a class="nav" href="/week/{{ prev_week.isoformat() }}" aria-label="Semana anterior">‹</a>
+  <h1>Semana de {{ week.start_date.strftime('%d/%m/%Y') }}</h1>
+  <a class="nav" href="/week/{{ next_week.isoformat() }}" aria-label="Próxima semana">›</a>
+</section>
+
+<form class="focus" hx-post="/week/{{ week.id }}/focus" hx-trigger="change" hx-swap="none">
+  <label for="focus_word">Palavra da semana</label>
+  <input id="focus_word" name="focus_word" value="{{ week.focus_word }}" placeholder="ex.: constância">
+</form>
+
+<div class="layout">
+  <section class="agenda">
+    {% for label, d in days %}
+    <article class="day">
+      <h2>{{ label }} <small>{{ d.strftime('%d/%m') }}</small></h2>
+      <ul id="day-{{ d.isoformat() }}" class="tasks">
+        {% for task in by_day[d] %}{% include "partials/task.html" %}{% endfor %}
+      </ul>
+      <form hx-post="/week/{{ week.id }}/tasks" hx-target="#day-{{ d.isoformat() }}"
+            hx-swap="beforeend" hx-on::after-request="this.reset()">
+        <input type="hidden" name="day" value="{{ d.isoformat() }}">
+        <input name="title" placeholder="+ tarefa" required aria-label="Nova tarefa para {{ label }}">
+      </form>
+    </article>
+    {% endfor %}
+  </section>
+
+  <aside class="side">
+    {% include "partials/performance.html" %}
+
+    <section class="card">
+      <h2>To-do</h2>
+      <ul id="backlog" class="tasks">
+        {% for task in backlog %}{% include "partials/task.html" %}{% endfor %}
+      </ul>
+      <form hx-post="/week/{{ week.id }}/tasks" hx-target="#backlog"
+            hx-swap="beforeend" hx-on::after-request="this.reset()">
+        <input name="title" placeholder="+ pendência" required aria-label="Nova pendência">
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}
