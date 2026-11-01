@@ -5,6 +5,8 @@
            hx-get="/tasks/{{ task.id }}" hx-trigger="keyup[key=='Escape']"
            hx-target="#task-{{ task.id }}" hx-swap="outerHTML">
     <div class="edit-row">
+      <input type="time" name="due_time" value="{{ task.due_time.strftime('%H:%M') if task.due_time else '' }}"
+             aria-label="Horário (opcional)" class="time">
       <select name="day" aria-label="Mover para">
         <option value=""{% if not task.day %} selected{% endif %}>To-do (sem dia)</option>
         {% for label, d in days %}

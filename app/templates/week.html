@@ -17,13 +17,10 @@
     {% for label, d in days %}
     <article class="day" data-drop-day="{{ d.isoformat() }}">
       <h2>{{ label }} <small>{{ d.strftime('%d/%m') }}</small></h2>
-      <ul id="day-{{ d.isoformat() }}" class="tasks">
-        {% for task in by_day[d] %}{% include "partials/task.html" %}{% endfor %}
-      </ul>
-      <form hx-post="/week/{{ week.id }}/tasks" hx-target="#day-{{ d.isoformat() }}"
-            hx-swap="beforeend" hx-on::after-request="this.reset()">
+      {% set day_tasks = by_day[d] %}{% include "partials/day_list.html" %}
+      <form hx-post="/week/{{ week.id }}/tasks" hx-swap="none" hx-on::after-request="this.reset()">
         <input type="hidden" name="day" value="{{ d.isoformat() }}">
-        <input name="title" placeholder="+ tarefa" required aria-label="Nova tarefa para {{ label }}">
+        <input name="title" placeholder="+ tarefa (14h …)" title="Comece com um horário, ex.: 14h Reunião ou 9:30 Médico" required aria-label="Nova tarefa para {{ label }}">
       </form>
     </article>
     {% endfor %}

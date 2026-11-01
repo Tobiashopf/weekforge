@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -14,7 +14,13 @@ from sqlmodel import Session, select
 
 from app.db import get_session, init_db
 from app.models import Task, Week
-from app.services import get_or_create_week, week_days, week_performance
+from app.services import (
+    get_or_create_week,
+    parse_quick_time,
+    sort_tasks,
+    week_days,
+    week_performance,
+)
 
 BASE = Path(__file__).parent
 templates = Jinja2Templates(directory=BASE / "templates")
@@ -39,7 +45,7 @@ def index():
 def week_view(request: Request, day: date, session: Session = Depends(get_session)):
     week = get_or_create_week(session, day)
     tasks = session.exec(select(Task).where(Task.week_id == week.id)).all()
-    by_day = {d: [t for t in tasks if t.day == d] for _, d in week_days(week)}
+    by_day = {d: sort_tasks([t for t in tasks if t.day == d]) for _, d in week_days(week)}
     backlog = [t for t in tasks if t.day is None]
     return templates.TemplateResponse(
         request,
@@ -77,11 +83,16 @@ def add_task(
 ):
     if session.get(Week, week_id) is None:
         raise HTTPException(404)
-    task = Task(week_id=week_id, title=title.strip(), day=day)
+    due_time, clean_title = parse_quick_time(title)
+    if not clean_title:
+        raise HTTPException(422, "Title cannot be empty")
+    task = Task(week_id=week_id, title=clean_title, day=day, due_time=due_time)
     session.add(task)
     session.commit()
     session.refresh(task)
-    return _task_response(request, session, task)
+    if task.day is None:
+        return templates.TemplateResponse(request, "partials/task.html", {"task": task})
+    return _changed_response(request, session, task)
 
 
 def _get_task(session: Session, task_id: int) -> Task:
@@ -120,45 +131,69 @@ def _parse_day(raw: str, week: Week) -> Optional[date]:
     return d
 
 
-def _list_id(task: Task) -> str:
-    return f"day-{task.day.isoformat()}" if task.day else "backlog"
+def _parse_time(raw: str) -> Optional[time]:
+    """'' clears the time; otherwise HH:MM."""
+    if raw == "":
+        return None
+    try:
+        return time.fromisoformat(raw)
+    except ValueError:
+        raise HTTPException(422, "Invalid time")
 
 
-def _moved_response(request: Request, session: Session, task: Task) -> HTMLResponse:
-    """Empty main body removes the old row; OOB swaps append it to its new list
-    and refresh the performance box."""
+def _day_tasks(session: Session, week_id: int, d: date) -> list[Task]:
+    return sort_tasks(session.exec(select(Task).where(Task.week_id == week_id, Task.day == d)).all())
+
+
+_ORIGIN_NONE = object()  # task is new: nothing to remove
+
+
+def _changed_response(
+    request: Request, session: Session, task: Task, origin=_ORIGIN_NONE
+) -> HTMLResponse:
+    """After a task is created/edited/moved, re-render where it was and where it is now.
+
+    `origin` is the task's previous day (None = it was in the to-do list). Everything
+    is sent as out-of-band swaps and `HX-Reswap: none` skips the main swap, so the
+    element that triggered the request may be safely replaced by a re-rendered list.
+    """
     week = session.get(Week, task.week_id)
-    return templates.TemplateResponse(
-        request,
-        "partials/task_moved.html",
-        {"task": task, "list_id": _list_id(task), "perf": week_performance(session, week)},
-    )
+    ctx = {"task": task, "perf": week_performance(session, week)}
+    if origin is not _ORIGIN_NONE and origin != task.day:
+        if origin is None:
+            ctx["remove_from_backlog"] = True
+        else:
+            ctx["old_d"], ctx["old_day_tasks"] = origin, _day_tasks(session, week.id, origin)
+    if task.day is not None:
+        ctx["new_day_tasks"] = _day_tasks(session, week.id, task.day)
+    response = templates.TemplateResponse(request, "partials/task_changed.html", ctx)
+    response.headers["HX-Reswap"] = "none"
+    return response
 
 
 @app.put("/tasks/{task_id}", response_class=HTMLResponse)
-def update_task(
-    request: Request,
-    task_id: int,
-    title: str = Form(...),
-    day: Optional[str] = Form(None),  # absent = keep current day
-    session: Session = Depends(get_session),
-):
+async def update_task(request: Request, task_id: int, session: Session = Depends(get_session)):
+    # Read the raw form: FastAPI's Form() turns "" into the default value, but here
+    # "" is meaningful (day "" = move to to-do, due_time "" = clear the time) and
+    # a missing field means "keep as is".
+    form = await request.form()
     task = _get_task(session, task_id)
-    title = title.strip()
+    title = str(form.get("title", "")).strip()
     if not title:
         raise HTTPException(422, "Title cannot be empty")
+    old_day = task.day
     task.title = title
-    moved = False
-    if day is not None:
-        new_day = _parse_day(day, session.get(Week, task.week_id))
-        moved = new_day != task.day
-        task.day = new_day
+    if "day" in form:
+        task.day = _parse_day(str(form["day"]), session.get(Week, task.week_id))
+    if "due_time" in form:
+        task.due_time = _parse_time(str(form["due_time"]))
     session.add(task)
     session.commit()
     session.refresh(task)
-    if moved:
-        return _moved_response(request, session, task)
-    return templates.TemplateResponse(request, "partials/task.html", {"task": task})
+    if task.day is None and old_day is None:
+        # stayed in the to-do list: just swap the row
+        return templates.TemplateResponse(request, "partials/task.html", {"task": task})
+    return _changed_response(request, session, task, origin=old_day)
 
 
 @app.post("/tasks/{task_id}/move", response_class=HTMLResponse)
@@ -172,11 +207,11 @@ def move_task(
     new_day = _parse_day(day, session.get(Week, task.week_id))
     if new_day == task.day:
         return templates.TemplateResponse(request, "partials/task.html", {"task": task})
-    task.day = new_day
+    old_day, task.day = task.day, new_day
     session.add(task)
     session.commit()
     session.refresh(task)
-    return _moved_response(request, session, task)
+    return _changed_response(request, session, task, origin=old_day)
 
 
 @app.delete("/tasks/{task_id}", response_class=HTMLResponse)

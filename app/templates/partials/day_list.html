@@ -1,0 +1,3 @@
+<ul id="day-{{ d.isoformat() }}" class="tasks"{% if list_oob %} hx-swap-oob="true"{% endif %}>
+  {% for task in day_tasks %}{% include "partials/task.html" %}{% endfor %}
+</ul>

@@ -1,0 +1,12 @@
+{# Out-of-band only (the server sends HX-Reswap: none). Clear the old place first. #}
+{% set list_oob = true %}
+{% if remove_from_backlog %}<li id="task-{{ task.id }}" hx-swap-oob="delete"></li>{% endif %}
+{% if old_day_tasks is defined %}
+  {% with d = old_d, day_tasks = old_day_tasks %}{% include "partials/day_list.html" %}{% endwith %}
+{% endif %}
+{% if task.day %}
+  {% with d = task.day, day_tasks = new_day_tasks %}{% include "partials/day_list.html" %}{% endwith %}
+{% else %}
+  <div hx-swap-oob="beforeend:#backlog">{% include "partials/task.html" %}</div>
+{% endif %}
+{% set oob = true %}{% include "partials/performance.html" %}

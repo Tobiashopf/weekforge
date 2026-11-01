@@ -54,14 +54,22 @@ h2 small { color: var(--muted); font-weight: 400; }
         padding: 2px 6px; border-radius: 6px; }
 .icon:hover { background: var(--line); color: var(--ink); }
 .icon.danger:hover { color: #c0392b; }
-.task.editing form { flex: 1; }
+.task.editing form { flex: 1; min-width: 0; }
 
 /* drag and drop */
 .task[draggable="true"] { cursor: grab; }
 .task.dragging { opacity: .4; }
 .drop-over { outline: 2px dashed var(--accent); outline-offset: 2px; background: var(--accent-soft); }
-.edit-row { display: flex; gap: 6px; margin-top: 6px; }
+.edit-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.edit-row > * { min-width: 0; }
 select { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line);
-         border-radius: 8px; padding: 6px 8px; flex: 1; }
+         border-radius: 8px; padding: 6px 8px; flex: 1 1 8rem; }
 .save { font: inherit; border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer;
         background: var(--accent); color: var(--card); font-weight: 600; }
+
+/* task time */
+.due { font-variant-numeric: tabular-nums; font-size: .8rem; font-weight: 600; color: var(--accent);
+       background: var(--accent-soft); border-radius: 6px; padding: 1px 6px; flex: none; }
+.task.done .due { opacity: .6; }
+input.time { width: auto; flex: none; }
+.day, .card { min-width: 0; }

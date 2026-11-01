@@ -134,7 +134,10 @@ def test_move_task_to_another_day(client):
     _week_with_task(client)
     r = client.post("/tasks/1/move", data={"day": "2026-11-04"})
     assert r.status_code == 200
-    assert 'hx-swap-oob="beforeend:#day-2026-11-04"' in r.text
+    assert r.headers["HX-Reswap"] == "none"
+    # old list re-rendered without it, new list with it
+    assert '<ul id="day-2026-11-02" class="tasks" hx-swap-oob="true">' in r.text
+    assert '<ul id="day-2026-11-04" class="tasks" hx-swap-oob="true">' in r.text
     assert 'id="performance"' in r.text
     page = client.get("/week/2026-11-01").text
     wed = page.split('id="day-2026-11-04"')[1].split("</ul>")[0]
@@ -152,7 +155,8 @@ def test_move_task_to_backlog_leaves_performance(client):
 def test_move_backlog_task_into_a_day(client):
     _week_with_task(client, day=None, title="Comprar caderno")
     r = client.post("/tasks/1/move", data={"day": "2026-11-07"})
-    assert 'beforeend:#day-2026-11-07' in r.text
+    assert '<li id="task-1" hx-swap-oob="delete">' in r.text
+    assert 'id="day-2026-11-07" class="tasks" hx-swap-oob="true"' in r.text
     assert "0 (0%)" in r.text  # now counts as pending
 
 
@@ -179,13 +183,14 @@ def test_edit_form_lists_days_with_current_selected(client):
 def test_put_with_new_day_moves_and_renames(client):
     _week_with_task(client)
     r = client.put("/tasks/1", data={"title": "Treino leve", "day": "2026-11-05"})
-    assert 'beforeend:#day-2026-11-05' in r.text and "Treino leve" in r.text
+    assert 'id="day-2026-11-05" class="tasks" hx-swap-oob="true"' in r.text
+    assert "Treino leve" in r.text
 
 
 def test_put_without_day_keeps_day(client):
     _week_with_task(client)
     r = client.put("/tasks/1", data={"title": "Treino leve"})
-    assert "hx-swap-oob" not in r.text
+    assert r.text.count('class="tasks" hx-swap-oob="true"') == 1  # only Monday re-rendered
     page = client.get("/week/2026-11-01").text
     mon = page.split('id="day-2026-11-02"')[1].split("</ul>")[0]
     assert "Treino leve" in mon
@@ -197,3 +202,73 @@ def test_page_has_drop_zones_and_draggable_rows(client):
     assert page.count("data-drop-day=") == 8  # 7 days + to-do
     assert 'draggable="true"' in page
     assert "/static/app.js" in page
+
+
+# --- task time ----------------------------------------------------------------
+
+from datetime import time  # noqa: E402
+
+from app.services import parse_quick_time  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("14h Reunião", (time(14, 0), "Reunião")),
+        ("9:30 Médico", (time(9, 30), "Médico")),
+        ("7h30 Treino", (time(7, 30), "Treino")),
+        ("07H05 Remédio", (time(7, 5), "Remédio")),
+        ("3 livros", (None, "3 livros")),
+        ("25h Festa", (None, "25h Festa")),
+        ("14h", (None, "14h")),
+        ("Ler 20 páginas às 14h", (None, "Ler 20 páginas às 14h")),
+    ],
+)
+def test_parse_quick_time(raw, expected):
+    assert parse_quick_time(raw) == expected
+
+
+def _day_section(page: str, d: str) -> str:
+    return page.split(f'id="day-{d}"')[1].split("</ul>")[0]
+
+
+def test_quick_time_on_create_and_sorted_by_time(client):
+    client.get("/week/2026-11-01")
+    for title in ["Sem hora", "18h Academia", "8:30 Daily"]:
+        client.post("/week/1/tasks", data={"title": title, "day": "2026-11-02"})
+    mon = _day_section(client.get("/week/2026-11-01").text, "2026-11-02")
+    # ids: 1 "Sem hora", 2 "Academia" 18:00, 3 "Daily" 08:30
+    assert mon.index('id="task-3"') < mon.index('id="task-2"') < mon.index('id="task-1"')
+    assert "08:30" in mon and "18:00" in mon
+    assert "18h Academia" not in mon  # prefix became the time
+
+
+def test_set_and_clear_time_via_edit(client):
+    _week_with_task(client)
+    r = client.put("/tasks/1", data={"title": "Treino", "due_time": "06:45"})
+    assert "06:45" in r.text
+    assert 'value="06:45"' in client.get("/tasks/1/edit").text
+
+    r = client.put("/tasks/1", data={"title": "Treino", "due_time": ""})
+    assert '<time class="due">' not in r.text
+
+
+def test_invalid_time_is_422(client):
+    _week_with_task(client)
+    assert client.put("/tasks/1", data={"title": "x", "due_time": "25:99"}).status_code == 422
+
+
+def test_empty_title_after_time_prefix_is_rejected(client):
+    client.get("/week/2026-11-01")
+    # "14h  " has no title after the time: regex needs text, so it stays as title "14h"
+    r = client.post("/week/1/tasks", data={"title": "14h", "day": "2026-11-02"})
+    assert r.status_code == 200 and "14h" in r.text
+
+
+def test_edit_to_todo_via_put_moves_to_backlog(client):
+    """Regression: an empty form value ("") must mean 'to-do', not 'keep'."""
+    _week_with_task(client)
+    r = client.put("/tasks/1", data={"title": "Treino", "day": ""})
+    assert 'beforeend:#backlog' in r.text
+    page = client.get("/week/2026-11-01").text
+    assert "Treino" in page.split('id="backlog"')[1].split("</ul>")[0]
