@@ -26,6 +26,7 @@ class Task(SQLModel, table=True):
     day: Optional[date] = None
     due_time: Optional[time] = None
     done: bool = False
+    carried: bool = False  # copied to the next week's to-do as unfinished
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

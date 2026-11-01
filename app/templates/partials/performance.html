@@ -6,6 +6,13 @@
   <dl>
     <div><dt>✓ Feitas</dt><dd>{{ perf.done }} ({{ perf.done_pct }}%)</dd></div>
     <div><dt>✗ Pendentes</dt><dd>{{ perf.pending }} ({{ perf.pending_pct }}%)</dd></div>
+    {% if perf.carried %}<div class="muted"><dt>↪ Levadas p/ próxima</dt><dd>{{ perf.carried }}</dd></div>{% endif %}
     <div><dt>Total</dt><dd>{{ perf.total }}</dd></div>
   </dl>
+  {% if perf.carryable %}
+  <button class="carry" hx-post="/week/{{ perf.week_id }}/carry-over"
+          hx-confirm="Levar {{ perf.carryable }} tarefa{{ 's' if perf.carryable > 1 }} não concluída{{ 's' if perf.carryable > 1 }} para o To-do da próxima semana?">
+    Levar {{ perf.carryable }} pendente{{ 's' if perf.carryable > 1 }} →
+  </button>
+  {% endif %}
 </section>

@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 from app.db import get_session, init_db
 from app.models import Task, Week
 from app.services import (
+    carry_over,
     get_or_create_week,
     parse_quick_time,
     sort_tasks,
@@ -73,6 +74,18 @@ def set_focus(week_id: int, focus_word: str = Form(""), session: Session = Depen
     return HTMLResponse("")
 
 
+@app.post("/week/{week_id}/carry-over", response_class=HTMLResponse)
+def carry_over_week(week_id: int, session: Session = Depends(get_session)):
+    week = session.get(Week, week_id)
+    if week is None:
+        raise HTTPException(404)
+    next_week, _ = carry_over(session, week)
+    # Open the next week, where the carried tasks wait in the to-do list.
+    response = HTMLResponse("")
+    response.headers["HX-Redirect"] = f"/week/{next_week.start_date.isoformat()}"
+    return response
+
+
 @app.post("/week/{week_id}/tasks", response_class=HTMLResponse)
 def add_task(
     request: Request,
@@ -91,7 +104,7 @@ def add_task(
     session.commit()
     session.refresh(task)
     if task.day is None:
-        return templates.TemplateResponse(request, "partials/task.html", {"task": task})
+        return _task_response(request, session, task)  # row + refreshed performance
     return _changed_response(request, session, task)
 
 
@@ -218,12 +231,10 @@ def move_task(
 def delete_task(request: Request, task_id: int, session: Session = Depends(get_session)):
     task = _get_task(session, task_id)
     week = session.get(Week, task.week_id)
-    was_scheduled = task.day is not None
     session.delete(task)
     session.commit()
-    # Empty body removes the row (hx-swap="outerHTML"); refresh the score if it counted.
-    if not was_scheduled:
-        return HTMLResponse("")
+    # Empty main body removes the row (hx-swap="outerHTML"); the performance box is
+    # refreshed out-of-band (score and the carry-over counter).
     return templates.TemplateResponse(
         request,
         "partials/performance.html",

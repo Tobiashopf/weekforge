@@ -38,6 +38,9 @@ def week_days(week: Week) -> list[tuple[str, date]]:
 class Performance:
     done: int
     pending: int
+    week_id: Optional[int] = None
+    carried: int = 0  # pending tasks already copied to next week (still count as pending)
+    carryable: int = 0  # unfinished tasks (agenda + to-do) not yet carried
 
     @property
     def total(self) -> int:
@@ -53,11 +56,39 @@ class Performance:
 
 
 def week_performance(session: Session, week: Week) -> Performance:
+    tasks = session.exec(select(Task).where(Task.week_id == week.id)).all()
+    scheduled = [t for t in tasks if t.day is not None]
+    done = sum(1 for t in scheduled if t.done)
+    return Performance(
+        done=done,
+        pending=len(scheduled) - done,
+        week_id=week.id,
+        carried=sum(1 for t in scheduled if t.carried),
+        carryable=sum(1 for t in tasks if not t.done and not t.carried),
+    )
+
+
+def carry_over(session: Session, week: Week) -> tuple[Week, int]:
+    """Bring unfinished work into the next week's to-do list.
+
+    - Unfinished agenda tasks are copied (title and time) and the original is marked
+      `carried`, so this week's score still shows them as not done.
+    - Unfinished to-do items have no day and don't affect the score: they are moved.
+    Running it twice does nothing the second time.
+    """
+    next_week = get_or_create_week(session, week.start_date + timedelta(days=7))
     tasks = session.exec(
-        select(Task).where(Task.week_id == week.id, Task.day.is_not(None))
+        select(Task).where(Task.week_id == week.id, Task.done == False, Task.carried == False)  # noqa: E712
     ).all()
-    done = sum(1 for t in tasks if t.done)
-    return Performance(done=done, pending=len(tasks) - done)
+    for task in sort_tasks(tasks):
+        if task.day is None:
+            task.week_id = next_week.id
+        else:
+            session.add(Task(week_id=next_week.id, title=task.title, due_time=task.due_time))
+            task.carried = True
+        session.add(task)
+    session.commit()
+    return next_week, len(tasks)
 
 
 # --- task time ---------------------------------------------------------------

@@ -73,3 +73,12 @@ select { font: inherit; color: inherit; background: var(--card); border: 1px sol
 .task.done .due { opacity: .6; }
 input.time { width: auto; flex: none; }
 .day, .card { min-width: 0; }
+
+/* carry over */
+.carry { margin-top: 12px; width: 100%; font: inherit; font-weight: 600; cursor: pointer;
+         border: 1px solid var(--accent); color: var(--accent); background: transparent;
+         border-radius: 8px; padding: 8px; }
+.carry:hover { background: var(--accent-soft); }
+.perf .muted dt, .perf .muted dd { color: var(--muted); font-weight: 400; }
+.task.carried:not(.done) .title { color: var(--muted); }
+.carried-tag { font-size: .72rem; color: var(--muted); white-space: nowrap; }

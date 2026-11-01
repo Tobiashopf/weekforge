@@ -65,7 +65,9 @@ def test_backlog_task_not_counted_in_performance(client):
     client.get("/week/2026-11-01")
     r = client.post("/week/1/tasks", data={"title": "Comprar caderno"})
     assert r.status_code == 200
-    assert 'id="performance"' not in r.text
+    flat = r.text.replace("\n", "").replace("  ", "")
+    assert "Total</dt><dd>0" in flat  # not counted in the score...
+    assert "Levar 1 pendente" in r.text  # ...but it can be carried over
 
 
 def test_edit_task_title(client):
@@ -108,11 +110,12 @@ def test_delete_scheduled_task_updates_performance(client):
     assert ">A<" not in client.get("/week/2026-11-01").text
 
 
-def test_delete_backlog_task_returns_empty(client):
+def test_delete_backlog_task_refreshes_counter(client):
     client.get("/week/2026-11-01")
     client.post("/week/1/tasks", data={"title": "Comprar caderno"})
     r = client.delete("/tasks/1")
-    assert r.status_code == 200 and r.text == ""
+    assert r.status_code == 200
+    assert '<li' not in r.text and "Levar" not in r.text  # row gone, nothing left to carry
 
 
 def test_missing_task_is_404(client):
@@ -272,3 +275,68 @@ def test_edit_to_todo_via_put_moves_to_backlog(client):
     assert 'beforeend:#backlog' in r.text
     page = client.get("/week/2026-11-01").text
     assert "Treino" in page.split('id="backlog"')[1].split("</ul>")[0]
+
+
+# --- carry over -------------------------------------------------------------
+
+
+def test_carry_over_copies_agenda_and_moves_todo(client):
+    client.get("/week/2026-11-01")
+    client.post("/week/1/tasks", data={"title": "9h Dentista", "day": "2026-11-03"})  # 1 pending
+    client.post("/week/1/tasks", data={"title": "Treino", "day": "2026-11-02"})       # 2 done
+    client.post("/week/1/tasks", data={"title": "Comprar caderno"})                     # 3 to-do
+    client.post("/tasks/2/toggle")
+
+    page = client.get("/week/2026-11-01").text
+    assert "Levar 2 pendentes" in page
+
+    r = client.post("/week/1/carry-over")
+    assert r.headers["HX-Redirect"] == "/week/2026-11-08"
+
+    nxt = client.get("/week/2026-11-08").text
+    todo = nxt.split('id="backlog"')[1].split("</ul>")[0]
+    assert "Dentista" in todo and "09:00" in todo  # copied with its time
+    assert "Comprar caderno" in todo               # moved
+    assert "Treino" not in nxt                     # done tasks stay behind
+
+    cur = client.get("/week/2026-11-01").text
+    assert "↪ próx. semana" in cur                 # original kept and marked
+    assert "Comprar caderno" not in cur            # to-do item left this week
+    assert "Levar" not in cur                      # nothing left to carry
+    flat = cur.replace("\n", "").replace("  ", "")
+    assert "Pendentes</dt><dd>1 (50%)" in flat     # score unchanged by carrying
+    assert "Levadas p/ próxima</dt><dd>1" in flat
+
+
+def test_carry_over_twice_does_not_duplicate(client):
+    client.get("/week/2026-11-01")
+    client.post("/week/1/tasks", data={"title": "Dentista", "day": "2026-11-03"})
+    client.post("/week/1/carry-over")
+    client.post("/week/1/carry-over")
+    nxt = client.get("/week/2026-11-08").text
+    assert nxt.count(">Dentista") == 1
+
+
+def test_carry_over_unknown_week_is_404(client):
+    assert client.post("/week/99/carry-over").status_code == 404
+
+
+def test_migration_adds_carried_column_to_old_database(tmp_path):
+    from sqlalchemy import create_engine as sa_engine
+
+    from app.db import init_db
+
+    eng = sa_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with eng.begin() as conn:  # schema as created by v0.1
+        conn.exec_driver_sql("CREATE TABLE week (id INTEGER PRIMARY KEY, start_date DATE, focus_word VARCHAR, notes VARCHAR)")
+        conn.exec_driver_sql(
+            "CREATE TABLE task (id INTEGER PRIMARY KEY, week_id INTEGER, title VARCHAR, day DATE,"
+            " due_time TIME, done BOOLEAN, created_at DATETIME)"
+        )
+        conn.exec_driver_sql("INSERT INTO task (week_id, title, done) VALUES (1, 'old', 0)")
+    init_db(eng)
+    init_db(eng)  # idempotent
+    with eng.begin() as conn:
+        cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(task)")}
+        assert "carried" in cols
+        assert conn.exec_driver_sql("SELECT carried FROM task").scalar() == 0

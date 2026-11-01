@@ -1,4 +1,4 @@
-<li id="task-{{ task.id }}" class="task{% if task.done %} done{% endif %}" draggable="true">
+<li id="task-{{ task.id }}" class="task{% if task.done %} done{% endif %}{% if task.carried %} carried{% endif %}" draggable="true">
   <button hx-post="/tasks/{{ task.id }}/toggle" hx-target="#task-{{ task.id }}" hx-swap="outerHTML"
           class="check" aria-pressed="{{ 'true' if task.done else 'false' }}"
           aria-label="{{ 'Desmarcar' if task.done else 'Concluir' }} {{ task.title }}">
@@ -7,7 +7,7 @@
   {% if task.due_time %}<time class="due">{{ task.due_time.strftime('%H:%M') }}</time>{% endif %}
   <span class="title" hx-get="/tasks/{{ task.id }}/edit" hx-trigger="dblclick"
         hx-target="#task-{{ task.id }}" hx-swap="outerHTML"
-        title="Clique duas vezes para editar">{{ task.title }}</span>
+        title="Clique duas vezes para editar">{{ task.title }}{% if task.carried and not task.done %} <small class="carried-tag" title="Copiada para o To-do da próxima semana">↪ próx. semana</small>{% endif %}</span>
   <span class="actions">
     <button class="icon" hx-get="/tasks/{{ task.id }}/edit" hx-target="#task-{{ task.id }}"
             hx-swap="outerHTML" aria-label="Editar {{ task.title }}">✎</button>
