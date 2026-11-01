@@ -101,7 +101,38 @@ def task_row(request: Request, task_id: int, session: Session = Depends(get_sess
 @app.get("/tasks/{task_id}/edit", response_class=HTMLResponse)
 def edit_task_form(request: Request, task_id: int, session: Session = Depends(get_session)):
     task = _get_task(session, task_id)
-    return templates.TemplateResponse(request, "partials/task_edit.html", {"task": task})
+    week = session.get(Week, task.week_id)
+    return templates.TemplateResponse(
+        request, "partials/task_edit.html", {"task": task, "days": week_days(week)}
+    )
+
+
+def _parse_day(raw: str, week: Week) -> Optional[date]:
+    """'' means backlog; otherwise an ISO date that must fall inside the task's week."""
+    if raw == "":
+        return None
+    try:
+        d = date.fromisoformat(raw)
+    except ValueError:
+        raise HTTPException(422, "Invalid day")
+    if not week.start_date <= d < week.start_date + timedelta(days=7):
+        raise HTTPException(422, "Day is outside this week")
+    return d
+
+
+def _list_id(task: Task) -> str:
+    return f"day-{task.day.isoformat()}" if task.day else "backlog"
+
+
+def _moved_response(request: Request, session: Session, task: Task) -> HTMLResponse:
+    """Empty main body removes the old row; OOB swaps append it to its new list
+    and refresh the performance box."""
+    week = session.get(Week, task.week_id)
+    return templates.TemplateResponse(
+        request,
+        "partials/task_moved.html",
+        {"task": task, "list_id": _list_id(task), "perf": week_performance(session, week)},
+    )
 
 
 @app.put("/tasks/{task_id}", response_class=HTMLResponse)
@@ -109,6 +140,7 @@ def update_task(
     request: Request,
     task_id: int,
     title: str = Form(...),
+    day: Optional[str] = Form(None),  # absent = keep current day
     session: Session = Depends(get_session),
 ):
     task = _get_task(session, task_id)
@@ -116,10 +148,35 @@ def update_task(
     if not title:
         raise HTTPException(422, "Title cannot be empty")
     task.title = title
+    moved = False
+    if day is not None:
+        new_day = _parse_day(day, session.get(Week, task.week_id))
+        moved = new_day != task.day
+        task.day = new_day
     session.add(task)
     session.commit()
     session.refresh(task)
+    if moved:
+        return _moved_response(request, session, task)
     return templates.TemplateResponse(request, "partials/task.html", {"task": task})
+
+
+@app.post("/tasks/{task_id}/move", response_class=HTMLResponse)
+def move_task(
+    request: Request,
+    task_id: int,
+    day: str = Form(""),
+    session: Session = Depends(get_session),
+):
+    task = _get_task(session, task_id)
+    new_day = _parse_day(day, session.get(Week, task.week_id))
+    if new_day == task.day:
+        return templates.TemplateResponse(request, "partials/task.html", {"task": task})
+    task.day = new_day
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return _moved_response(request, session, task)
 
 
 @app.delete("/tasks/{task_id}", response_class=HTMLResponse)

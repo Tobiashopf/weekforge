@@ -11,7 +11,7 @@ Estimates are rough and only meant to size the work.
 
 ## v0.2 — Tasks, complete (~4h)
 - [x] Edit and delete tasks
-- [ ] Move tasks between days and from the backlog to a day (drag and drop)
+- [x] Move tasks between days and from the backlog to a day (drag and drop)
 - [ ] Optional time on a task
 - [ ] Carry unfinished tasks over to the next week
 - [ ] Recurring tasks (every weekday, every Monday…)

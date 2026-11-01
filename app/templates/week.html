@@ -15,7 +15,7 @@
 <div class="layout">
   <section class="agenda">
     {% for label, d in days %}
-    <article class="day">
+    <article class="day" data-drop-day="{{ d.isoformat() }}">
       <h2>{{ label }} <small>{{ d.strftime('%d/%m') }}</small></h2>
       <ul id="day-{{ d.isoformat() }}" class="tasks">
         {% for task in by_day[d] %}{% include "partials/task.html" %}{% endfor %}
@@ -32,7 +32,7 @@
   <aside class="side">
     {% include "partials/performance.html" %}
 
-    <section class="card">
+    <section class="card" data-drop-day="">
       <h2>To-do</h2>
       <ul id="backlog" class="tasks">
         {% for task in backlog %}{% include "partials/task.html" %}{% endfor %}

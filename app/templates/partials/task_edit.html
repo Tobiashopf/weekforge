@@ -4,5 +4,14 @@
            aria-label="Editar tarefa"
            hx-get="/tasks/{{ task.id }}" hx-trigger="keyup[key=='Escape']"
            hx-target="#task-{{ task.id }}" hx-swap="outerHTML">
+    <div class="edit-row">
+      <select name="day" aria-label="Mover para">
+        <option value=""{% if not task.day %} selected{% endif %}>To-do (sem dia)</option>
+        {% for label, d in days %}
+        <option value="{{ d.isoformat() }}"{% if task.day == d %} selected{% endif %}>{{ label }} {{ d.strftime('%d/%m') }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="save">Salvar</button>
+    </div>
   </form>
 </li>
