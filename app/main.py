@@ -84,11 +84,64 @@ def add_task(
     return _task_response(request, session, task)
 
 
-@app.post("/tasks/{task_id}/toggle", response_class=HTMLResponse)
-def toggle_task(request: Request, task_id: int, session: Session = Depends(get_session)):
+def _get_task(session: Session, task_id: int) -> Task:
     task = session.get(Task, task_id)
     if task is None:
         raise HTTPException(404)
+    return task
+
+
+@app.get("/tasks/{task_id}", response_class=HTMLResponse)
+def task_row(request: Request, task_id: int, session: Session = Depends(get_session)):
+    """The plain task row (used to cancel an edit)."""
+    task = _get_task(session, task_id)
+    return templates.TemplateResponse(request, "partials/task.html", {"task": task})
+
+
+@app.get("/tasks/{task_id}/edit", response_class=HTMLResponse)
+def edit_task_form(request: Request, task_id: int, session: Session = Depends(get_session)):
+    task = _get_task(session, task_id)
+    return templates.TemplateResponse(request, "partials/task_edit.html", {"task": task})
+
+
+@app.put("/tasks/{task_id}", response_class=HTMLResponse)
+def update_task(
+    request: Request,
+    task_id: int,
+    title: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    task = _get_task(session, task_id)
+    title = title.strip()
+    if not title:
+        raise HTTPException(422, "Title cannot be empty")
+    task.title = title
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return templates.TemplateResponse(request, "partials/task.html", {"task": task})
+
+
+@app.delete("/tasks/{task_id}", response_class=HTMLResponse)
+def delete_task(request: Request, task_id: int, session: Session = Depends(get_session)):
+    task = _get_task(session, task_id)
+    week = session.get(Week, task.week_id)
+    was_scheduled = task.day is not None
+    session.delete(task)
+    session.commit()
+    # Empty body removes the row (hx-swap="outerHTML"); refresh the score if it counted.
+    if not was_scheduled:
+        return HTMLResponse("")
+    return templates.TemplateResponse(
+        request,
+        "partials/performance.html",
+        {"perf": week_performance(session, week), "oob": True},
+    )
+
+
+@app.post("/tasks/{task_id}/toggle", response_class=HTMLResponse)
+def toggle_task(request: Request, task_id: int, session: Session = Depends(get_session)):
+    task = _get_task(session, task_id)
     task.done = not task.done
     session.add(task)
     session.commit()

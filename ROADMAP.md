@@ -10,7 +10,7 @@ Estimates are rough and only meant to size the work.
 - [x] Test suite and CI
 
 ## v0.2 — Tasks, complete (~4h)
-- [ ] Edit and delete tasks
+- [x] Edit and delete tasks
 - [ ] Move tasks between days and from the backlog to a day (drag and drop)
 - [ ] Optional time on a task
 - [ ] Carry unfinished tasks over to the next week

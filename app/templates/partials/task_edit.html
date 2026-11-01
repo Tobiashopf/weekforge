@@ -1,0 +1,8 @@
+<li id="task-{{ task.id }}" class="task editing">
+  <form hx-put="/tasks/{{ task.id }}" hx-target="#task-{{ task.id }}" hx-swap="outerHTML">
+    <input name="title" value="{{ task.title }}" required autofocus
+           aria-label="Editar tarefa"
+           hx-get="/tasks/{{ task.id }}" hx-trigger="keyup[key=='Escape']"
+           hx-target="#task-{{ task.id }}" hx-swap="outerHTML">
+  </form>
+</li>

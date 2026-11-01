@@ -4,5 +4,14 @@
           aria-label="{{ 'Desmarcar' if task.done else 'Concluir' }} {{ task.title }}">
     {% if task.done %}✓{% endif %}
   </button>
-  <span>{{ task.title }}</span>
+  <span class="title" hx-get="/tasks/{{ task.id }}/edit" hx-trigger="dblclick"
+        hx-target="#task-{{ task.id }}" hx-swap="outerHTML"
+        title="Clique duas vezes para editar">{{ task.title }}</span>
+  <span class="actions">
+    <button class="icon" hx-get="/tasks/{{ task.id }}/edit" hx-target="#task-{{ task.id }}"
+            hx-swap="outerHTML" aria-label="Editar {{ task.title }}">✎</button>
+    <button class="icon danger" hx-delete="/tasks/{{ task.id }}" hx-target="#task-{{ task.id }}"
+            hx-swap="outerHTML" hx-confirm="Apagar &quot;{{ task.title }}&quot;?"
+            aria-label="Apagar {{ task.title }}">×</button>
+  </span>
 </li>
