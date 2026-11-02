@@ -55,7 +55,7 @@ cp .env.example .env             # optional; defaults work out of the box
 uvicorn app.main:app --reload
 ```
 
-Open http://127.0.0.1:8000. The database file `weekforge.db` is created on first run.
+With the server running, open `http://localhost:8000` in your browser (it is served by your own computer, so the address only works while `uvicorn` is running). The database file `weekforge.db` is created on first run.
 
 Run the tests:
 
