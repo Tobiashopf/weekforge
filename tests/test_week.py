@@ -719,3 +719,78 @@ def test_month_labels_skip_crowded_edges(today_is):
     labels = month_labels(cols)
     assert all(i <= 50 for i, _ in labels)                     # nothing at the right edge
     assert all(b - a >= 3 for (a, _), (b, _) in zip(labels, labels[1:]))
+
+
+# --- export -------------------------------------------------------------------------
+
+import csv as _csv  # noqa: E402
+import io as _io  # noqa: E402
+
+from app.export import _cell  # noqa: E402
+
+
+def _rows(text: str) -> list[list[str]]:
+    assert text.startswith("﻿")  # BOM for Excel
+    return list(_csv.reader(_io.StringIO(text.lstrip("﻿"))))
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [("=HYPERLINK(\"x\")", "'=HYPERLINK(\"x\")"), ("+1", "'+1"), ("-cmd", "'-cmd"), ("@x", "'@x"),
+     ("Treino", "Treino"), (-5, "-5"), (True, "sim"), (None, "")],
+)
+def test_csv_cells_neutralize_formulas(value, expected):
+    assert _cell(value) == expected
+
+
+def test_export_tasks_csv(client, today_is):
+    today_is("2026-11-04")
+    client.get("/week/2026-11-01")
+    client.post("/week/1/tasks", data={"title": "9h Médico", "day": "2026-11-02"})
+    client.post("/week/1/tasks", data={"title": "=SOMA(A1)", "day": "2026-11-03"})
+    client.post("/tasks/1/toggle")
+    r = client.get("/export/tasks.csv")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    assert 'filename="weekforge-tarefas-2026-11-04.csv"' in r.headers["content-disposition"]
+    rows = _rows(r.text)
+    assert rows[0] == ["semana", "dia", "horario", "titulo", "feita", "levada_para_proxima", "recorrente"]
+    assert rows[1] == ["2026-11-01", "2026-11-02", "09:00", "Médico", "sim", "não", "não"]
+    assert rows[2][3] == "'=SOMA(A1)"
+
+
+def test_export_habits_csv(client, today_is):
+    today_is("2026-11-04")
+    ids = _habit_ids(client)
+    client.get("/week/2026-11-01")
+    client.post(f"/habits/{ids['Meditação']}/log", data={"day": "2026-11-03", "action": "toggle"})
+    client.post(f"/habits/{ids['Água']}/log", data={"day": "2026-11-03", "action": "inc"})
+    client.post(f"/habits/{ids['Meditação']}/minutes", data={"week_id": 1, "minutes": "50"})
+    rows = _rows(client.get("/export/habits.csv").text)
+    assert ["2026-11-03", "Meditação", "check", "1", "1", "sim", ""] in rows
+    assert ["2026-11-03", "Água", "counter", "1", "8", "não", ""] in rows
+    assert ["2026-11-01", "Meditação", "minutos_semana", "", "", "", "50"] in rows
+
+
+def test_export_json_backup(client, today_is):
+    today_is("2026-11-04")
+    client.get("/week/2026-11-01")
+    client.post("/week/1/text", data={"notes": "Semana boa"})
+    client.post("/week/1/tasks", data={"title": "7h Treino", "day": "2026-11-04"})
+    client.post("/recurring", data={"title": "Inglês", "weekdays": ["1"]})
+    r = client.get("/export/weekforge.json")
+    assert r.status_code == 200
+    assert 'filename="weekforge-backup-2026-11-04.json"' in r.headers["content-disposition"]
+    data = r.json()
+    assert data["app"] == "weekforge" and data["version"] == 1
+    assert data["weeks"][0]["notes"] == "Semana boa"
+    assert {"title": "Treino", "due_time": "07:00", "day": "2026-11-04"}.items() <= data["tasks"][0].items()
+    assert data["recurring_tasks"][0]["weekdays"] == "1"
+    assert len(data["habits"]) == 6 and data["habits"][-1]["kind"] == "counter"
+    assert set(data) >= {"habit_logs", "habit_weeks", "exported_at"}
+
+
+def test_metrics_page_links_exports(client):
+    page = client.get("/metrics").text
+    for href in ["/export/tasks.csv", "/export/habits.csv", "/export/weekforge.json"]:
+        assert f'href="{href}"' in page

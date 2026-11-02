@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
 from app import db as _db
+from app import export as _export
 from app import metrics as _metrics
 from app.db import get_session, init_db
 from app.models import Habit, HabitKind, RecurringTask, Task, Week
@@ -514,3 +515,33 @@ def metrics_page(request: Request, weeks: int = 12, session: Session = Depends(g
             "active_days": sum(1 for col in heat for c in col if c.count and not c.future),
         },
     )
+
+
+# --- export -----------------------------------------------------------------------
+
+
+def _download(content: str, name: str, media_type: str) -> Response:
+    """name like 'tarefas.csv' -> weekforge-tarefas-2026-11-01.csv"""
+    stem, ext = name.rsplit(".", 1)
+    return Response(
+        content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="weekforge-{stem}-{today().isoformat()}.{ext}"'},
+    )
+
+
+@app.get("/export/tasks.csv")
+def export_tasks(session: Session = Depends(get_session)):
+    return _download(_export.tasks_csv(session), "tarefas.csv", "text/csv; charset=utf-8")
+
+
+@app.get("/export/habits.csv")
+def export_habits(session: Session = Depends(get_session)):
+    return _download(_export.habits_csv(session), "habitos.csv", "text/csv; charset=utf-8")
+
+
+@app.get("/export/weekforge.json")
+def export_json(session: Session = Depends(get_session)):
+    response = JSONResponse(_export.full_backup(session))
+    response.headers["Content-Disposition"] = f'attachment; filename="weekforge-backup-{today().isoformat()}.json"'
+    return response

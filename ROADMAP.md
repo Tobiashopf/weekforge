@@ -23,13 +23,13 @@ Estimates are rough and only meant to size the work.
 - [x] Weekly minutes per check habit; +1 / −1 for counters (water)
 - [x] Default habit set on first run, fully editable
 
-## v0.4 — Metrics (~5h)
+## v0.4 — Metrics (done)
 - [x] Dashboard: completion rate per week over time (4 / 12 / 26 / 52 weeks)
 - [x] Completion by weekday (which days slip?)
 - [x] Habit streaks and best streak
 - [x] Minutes per habit per week; average water per day
 - [x] Year heatmap
-- [ ] CSV / JSON export
+- [x] CSV / JSON export
 
 ## v0.5 — Notifications and PWA (~6h)
 - [ ] Web app manifest and service worker (installable on phone and desktop)

@@ -8,19 +8,27 @@ Weekforge started as a replacement for my own paper weekly planner. It keeps the
 
 ## Features
 
-**Working now**
-- Week view (Sunday to Saturday) with tasks per day and navigation between weeks
-- Focus word for the week
-- Unscheduled to-do list (backlog)
-- Weekly performance: done vs. pending tasks with percentages, updated live
+**Plan the week**
+- Week view (Sunday to Saturday) with a focus word, tasks per day and navigation between weeks
+- Quick entry with a time: typing `14h Meeting` or `9:30 Doctor` sets the time; timed tasks are sorted first
+- Edit, delete and move tasks between days or to the to-do list (drag and drop, or from the edit form on mobile)
+- Recurring tasks: weekly rules (e.g. Mon/Wed/Fri at 7:00) filled into the current and every new week
+- Carry unfinished tasks over to next week's to-do, without hiding them from this week's score
+- Week reminders and notes, saved automatically as you type
+
+**Track habits**
+- Weekly habit grid like a paper planner: check habits with weekly minutes, counter habits (glasses of water) with a daily target
+- Default habits on first run; rename, re-target, add or archive (history is kept)
+
+**See how it's going**
+- Live weekly performance: done vs. pending tasks
+- Metrics page: completion per week (4 to 52 weeks) and per weekday, habit streaks and records, a year heatmap; every chart has a hover/keyboard tooltip and a table view
+- Export: tasks and habits as CSV (safe against spreadsheet formula injection), full backup as JSON
 
 **Planned** (see [ROADMAP.md](ROADMAP.md))
-- Habit tracking: check habits with minutes (meditation, reading, exercise, study…) and counters (glasses of water)
-- Metrics dashboard: weekly history, streaks, heatmap, minutes per habit
 - Push notifications: task reminders, habit nudges, water reminders, Sunday planning and weekly review
 - Installable PWA with offline support
-- Weekly review, carry-over of unfinished tasks, recurring tasks
-- CSV/JSON export
+- Weekly review, Docker image, proper database migrations
 
 ## Built with
 
@@ -55,11 +63,13 @@ pytest
 ```
 app/
   main.py        routes (FastAPI + HTMX partials)
-  models.py      Week, Task, Habit, HabitLog
-  services.py    week logic and performance metrics
-  db.py          engine and sessions
-  templates/     Jinja2 pages and partials
-  static/        CSS
+  models.py      Week, Task, RecurringTask, Habit, HabitLog, HabitWeek
+  services.py    weeks, tasks, carry-over, recurring rules, habits
+  metrics.py     numbers for the metrics page (read-only)
+  export.py      CSV and JSON export (read-only)
+  db.py          engine, sessions and small startup migrations
+  templates/     Jinja2 pages, partials and server-rendered SVG charts
+  static/        CSS and a little JavaScript (drag and drop, chart tooltips)
 tests/           pytest suite
 ```
 

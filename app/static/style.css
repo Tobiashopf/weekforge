@@ -209,3 +209,8 @@ table.data tbody th { font-weight: 500; white-space: nowrap; }
 .hint.small { font-size: .85rem; margin: 0 0 8px; }
 .tip { position: fixed; z-index: 10; pointer-events: none; background: var(--ink); color: var(--bg);
        font-size: .8rem; font-weight: 600; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
+
+/* export */
+.downloads { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.downloads small { color: var(--muted); margin-left: 6px; }
+code { font-size: .85em; background: var(--line); border-radius: 4px; padding: 1px 4px; }

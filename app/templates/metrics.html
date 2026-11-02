@@ -71,6 +71,15 @@
   <p class="hint small">Cada quadrado é um dia: tarefas concluídas + hábitos cumpridos.</p>
   <div class="table-wrap">{{ heatmap(heat_columns, heat_months) }}</div>
 </section>
+<section class="card export">
+  <h2>Exportar dados</h2>
+  <p class="hint small">Seus dados ficam no arquivo <code>weekforge.db</code> desta máquina. Baixe uma cópia quando quiser:</p>
+  <ul class="downloads">
+    <li><a href="/export/tasks.csv" download>Tarefas (CSV)</a> <small>para planilhas</small></li>
+    <li><a href="/export/habits.csv" download>Hábitos (CSV)</a> <small>registro diário e minutos por semana</small></li>
+    <li><a href="/export/weekforge.json" download>Backup completo (JSON)</a> <small>tudo, incluindo notas e regras</small></li>
+  </ul>
+</section>
 <div id="tip" class="tip" role="status" hidden></div>
 <script>
   document.querySelectorAll("select.autosubmit").forEach((s) => s.addEventListener("change", () => s.form.submit()));
