@@ -47,3 +47,31 @@
     });
   });
 })();
+
+// Tooltips for chart marks: any element with data-tip, on hover and keyboard focus.
+// Text goes in with textContent (labels are user data).
+(() => {
+  const tip = () => document.getElementById("tip");
+  const show = (el, x, y) => {
+    const t = tip();
+    if (!t) return;
+    t.textContent = el.dataset.tip;
+    t.hidden = false;
+    const w = t.offsetWidth;
+    t.style.left = `${Math.min(Math.max(8, x - w / 2), window.innerWidth - w - 8)}px`;
+    t.style.top = `${y - t.offsetHeight - 10}px`;
+  };
+  const hide = () => { const t = tip(); if (t) t.hidden = true; };
+  document.addEventListener("pointermove", (e) => {
+    const el = e.target instanceof Element ? e.target.closest("[data-tip]") : null;
+    el ? show(el, e.clientX, e.clientY) : hide();
+  });
+  document.addEventListener("focusin", (e) => {
+    const el = e.target instanceof Element ? e.target.closest("[data-tip]") : null;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    show(el, r.left + r.width / 2, r.top);
+  });
+  document.addEventListener("focusout", hide);
+  document.addEventListener("scroll", hide, true);
+})();

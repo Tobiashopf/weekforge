@@ -623,3 +623,99 @@ def test_invalid_habit_rejected(client, data):
 def test_habit_name_is_escaped(client):
     client.post("/habits", data={"name": "<b>x</b>", "kind": "check"})
     assert "<b>x</b>" not in client.get("/week/2026-11-01").text
+
+
+# --- metrics ------------------------------------------------------------------------
+
+from datetime import timedelta  # noqa: E402
+
+from app import metrics as _m  # noqa: E402
+
+
+def test_streaks_current_and_best(today_is):
+    today_is("2026-11-10")
+    d = _date.fromisoformat
+    met = {d("2026-11-01"), d("2026-11-02"), d("2026-11-03"), d("2026-11-04"),  # best: 4
+           d("2026-11-08"), d("2026-11-09")}                                     # current: 2 (ends yesterday)
+    assert _m.streaks(met) == (2, 4)
+    assert _m.streaks(met | {d("2026-11-10")}) == (3, 4)   # today counts once done
+    assert _m.streaks({d("2026-11-07")}) == (0, 1)          # gap before yesterday breaks it
+    assert _m.streaks(set()) == (0, 0)
+
+
+def test_weekly_and_weekday_completion(client, today_is):
+    today_is("2026-11-10")  # Tuesday of week 08/11
+    client.get("/week/2026-11-01")
+    client.post("/week/1/tasks", data={"title": "A", "day": "2026-11-02"})  # Mon, done
+    client.post("/week/1/tasks", data={"title": "B", "day": "2026-11-02"})  # Mon, not done
+    client.post("/week/1/tasks", data={"title": "C", "day": "2026-11-04"})  # Wed, done
+    client.post("/week/1/tasks", data={"title": "Backlog"})                 # ignored
+    for tid in (1, 3):
+        client.post(f"/tasks/{tid}/toggle")
+    with Session(db.engine) as s:
+        weeks = _m.weekly_completion(s, 4)
+        assert [w.start.isoformat() for w in weeks] == ["2026-10-18", "2026-10-25", "2026-11-01", "2026-11-08"]
+        assert (weeks[2].done, weeks[2].total, weeks[2].pct) == (2, 3, 67)
+        assert weeks[3].pct is None  # no tasks: no bar, not 0%
+        days = _m.weekday_completion(s, 4)
+        assert (days[1].label, days[1].pct) == ("SEG", 50)
+        assert (days[3].label, days[3].pct) == ("QUA", 100)
+        assert days[0].pct is None
+
+
+def test_habit_stats_and_heatmap(client, today_is):
+    today_is("2026-11-04")
+    ids = _habit_ids(client)
+    for day in ["2026-11-02", "2026-11-03", "2026-11-04"]:
+        client.post(f"/habits/{ids['Meditação']}/log", data={"day": day, "action": "toggle"})
+    client.get("/week/2026-11-01")
+    client.post(f"/habits/{ids['Meditação']}/minutes", data={"week_id": 1, "minutes": "60"})
+    for _ in range(3):
+        client.post(f"/habits/{ids['Água']}/log", data={"day": "2026-11-04", "action": "inc"})  # below target 8
+    with Session(db.engine) as s:
+        stats = {st.habit.name: st for st in _m.habit_stats(s, 12)}
+        med = stats["Meditação"]
+        assert (med.current_streak, med.best_streak, med.met_last_30, med.avg) == (3, 3, 3, 60)
+        agua = stats["Água"]
+        assert agua.met_last_30 == 0 and agua.avg == 0.1  # 3 glasses / 30 days
+        heat = _m.year_heatmap(s)
+    assert len(heat) == 53 and all(len(col) == 7 for col in heat)
+    cells = {c.day.isoformat(): c for col in heat for c in col}
+    assert cells["2026-11-04"].count == 1 and cells["2026-11-04"].level == 1  # water below target: not counted
+    assert cells["2026-11-05"].future
+
+
+def test_heat_levels():
+    assert [_m.HeatCell(_date(2026, 1, 1), n, False).level for n in (0, 1, 2, 3, 5, 9)] == [0, 1, 1, 2, 3, 4]
+
+
+@pytest.mark.parametrize("q, selected", [("", "12"), ("?weeks=4", "4"), ("?weeks=52", "52"), ("?weeks=7", "12")])
+def test_metrics_page_renders(client, today_is, q, selected):
+    today_is("2026-11-04")
+    r = client.get(f"/metrics{q}")
+    assert r.status_code == 200
+    assert f'<option value="{selected}" selected>' in r.text
+    for text in ["Tarefas concluídas por semana", "Conclusão por dia da semana", "Último ano", "Meditação"]:
+        assert text in r.text
+    assert 'data-tip="' in r.text and "Ver como tabela" in r.text
+
+
+def test_metrics_page_with_data_has_bars_and_label(client, today_is):
+    today_is("2026-11-04")
+    client.get("/week/2026-11-01")
+    client.post("/week/1/tasks", data={"title": "A", "day": "2026-11-02"})
+    client.post("/tasks/1/toggle")
+    page = client.get("/metrics?weeks=4").text
+    assert page.count('class="bar"') == 2          # this week + Monday column
+    assert '>100%</text>' in page                   # latest value labeled
+    assert "1 de 1 tarefas" in page
+
+
+def test_month_labels_skip_crowded_edges(today_is):
+    today_is("2026-11-04")
+    from app.metrics import HeatCell, month_labels
+    start = _date(2025, 11, 2)
+    cols = [[HeatCell(start + timedelta(weeks=w, days=i), 0, False) for i in range(7)] for w in range(53)]
+    labels = month_labels(cols)
+    assert all(i <= 50 for i, _ in labels)                     # nothing at the right edge
+    assert all(b - a >= 3 for (a, _), (b, _) in zip(labels, labels[1:]))

@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
 from app import db as _db
+from app import metrics as _metrics
 from app.db import get_session, init_db
 from app.models import Habit, HabitKind, RecurringTask, Task, Week
 from app.services import (
@@ -36,6 +37,8 @@ from app.services import (
 
 BASE = Path(__file__).parent
 templates = Jinja2Templates(directory=BASE / "templates")
+# Compact numbers for SVG coordinates: 12.3456 -> "12.3", 20.0 -> "20".
+templates.env.filters["n"] = lambda v: f"{v:.1f}".rstrip("0").rstrip(".")
 
 
 @asynccontextmanager
@@ -468,3 +471,46 @@ def habits_archive(habit_id: int, session: Session = Depends(get_session)):
     session.add(habit)
     session.commit()
     return RedirectResponse("/habits", status_code=303)
+
+
+# --- metrics ----------------------------------------------------------------------
+
+_METRIC_WINDOWS = (4, 12, 26, 52)
+
+
+@app.get("/metrics", response_class=HTMLResponse)
+def metrics_page(request: Request, weeks: int = 12, session: Session = Depends(get_session)):
+    if weeks not in _METRIC_WINDOWS:
+        weeks = 12
+    week_rates = _metrics.weekly_completion(session, weeks)
+    weekday_rates = _metrics.weekday_completion(session, weeks)
+    heat = _metrics.year_heatmap(session)
+    period_done = sum(w.done for w in week_rates)
+    period_total = sum(w.total for w in week_rates)
+
+    def tip(done, total, what):
+        return f"{what}: sem tarefas" if not total else f"{what}: {round(100 * done / total)}% ({done} de {total})"
+
+    return templates.TemplateResponse(
+        request,
+        "metrics.html",
+        {
+            "weeks": weeks,
+            "week_rates": week_rates,
+            "week_points": [
+                (w.start.strftime("%d/%m"), w.pct, tip(w.done, w.total, f"Semana de {w.start.strftime('%d/%m')}"))
+                for w in week_rates
+            ],
+            "week_label_step": max(1, weeks // 6),
+            "weekday_rates": weekday_rates,
+            "weekday_points": [(w.label, w.pct, tip(w.done, w.total, w.label)) for w in weekday_rates],
+            "this_week": week_rates[-1],
+            "period_done": period_done,
+            "period_total": period_total,
+            "period_pct": round(100 * period_done / period_total) if period_total else None,
+            "habit_stats": _metrics.habit_stats(session, weeks),
+            "heat_columns": heat,
+            "heat_months": _metrics.month_labels(heat),
+            "active_days": sum(1 for col in heat for c in col if c.count and not c.future),
+        },
+    )

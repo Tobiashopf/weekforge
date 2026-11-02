@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "partials/charts.html" import column_chart, heatmap %}
+{% block title %}Métricas · Weekforge{% endblock %}
+{% block content %}
+<section class="week-head"><h1>Métricas</h1></section>
+
+<form class="filters" method="get" action="/metrics">
+  <label for="weeks">Período</label>
+  <select id="weeks" name="weeks" class="autosubmit">
+    {% for n, text in [(4, "Últimas 4 semanas"), (12, "Últimas 12 semanas"), (26, "Últimos 6 meses"), (52, "Último ano")] %}
+    <option value="{{ n }}"{% if n == weeks %} selected{% endif %}>{{ text }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button class="save">Aplicar</button></noscript>
+</form>
+
+<section class="tiles">
+  <div class="tile"><span class="tile-label">Conclusão nesta semana</span>
+    <strong class="tile-value">{{ this_week.pct ~ "%" if this_week.pct is not none else "–" }}</strong>
+    <span class="tile-sub">{{ this_week.done }} de {{ this_week.total }} tarefas</span></div>
+  <div class="tile"><span class="tile-label">Média no período</span>
+    <strong class="tile-value">{{ period_pct ~ "%" if period_pct is not none else "–" }}</strong>
+    <span class="tile-sub">{{ period_done }} de {{ period_total }} tarefas</span></div>
+  <div class="tile"><span class="tile-label">Dias ativos no ano</span>
+    <strong class="tile-value">{{ active_days }}</strong>
+    <span class="tile-sub">com ao menos 1 tarefa ou hábito</span></div>
+</section>
+
+<div class="metrics-grid">
+  <section class="card">
+    <h2>Tarefas concluídas por semana</h2>
+    {{ column_chart(week_points, "Percentual de tarefas concluídas por semana", show_every=week_label_step) }}
+    <details><summary>Ver como tabela</summary>
+      <table class="data"><thead><tr><th>Semana</th><th>Feitas</th><th>Total</th><th>%</th></tr></thead><tbody>
+      {% for w in week_rates %}<tr><td>{{ w.start.strftime('%d/%m/%Y') }}</td><td>{{ w.done }}</td><td>{{ w.total }}</td><td>{{ w.pct ~ "%" if w.pct is not none else "–" }}</td></tr>{% endfor %}
+      </tbody></table></details>
+  </section>
+
+  <section class="card">
+    <h2>Conclusão por dia da semana</h2>
+    {{ column_chart(weekday_points, "Percentual de tarefas concluídas por dia da semana") }}
+    <details><summary>Ver como tabela</summary>
+      <table class="data"><thead><tr><th>Dia</th><th>Feitas</th><th>Total</th><th>%</th></tr></thead><tbody>
+      {% for w in weekday_rates %}<tr><td>{{ w.label }}</td><td>{{ w.done }}</td><td>{{ w.total }}</td><td>{{ w.pct ~ "%" if w.pct is not none else "–" }}</td></tr>{% endfor %}
+      </tbody></table></details>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Hábitos</h2>
+  <div class="table-wrap">
+  <table class="data habits-stats">
+    <thead><tr><th>Hábito</th><th>Sequência atual</th><th>Recorde</th><th>Últimos 30 dias</th><th>Média</th></tr></thead>
+    <tbody>
+    {% for s in habit_stats %}
+    <tr>
+      <th scope="row"><span aria-hidden="true">{{ s.habit.emoji }}</span> {{ s.habit.name }}</th>
+      <td>{{ s.current_streak }} dia{{ 's' if s.current_streak != 1 }}</td>
+      <td>{{ s.best_streak }} dia{{ 's' if s.best_streak != 1 }}</td>
+      <td><span class="meter" role="img" aria-label="{{ s.met_last_30 }} de 30 dias"><span style="width: {{ (s.met_last_30 / 30 * 100) | round(1) }}%"></span></span> {{ s.met_last_30 }}/30</td>
+      <td>{{ s.avg if s.avg is not none else "–" }} <small>{{ s.avg_unit }}</small></td>
+    </tr>
+    {% else %}<tr><td colspan="5" class="hint">Nenhum hábito ativo.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Último ano</h2>
+  <p class="hint small">Cada quadrado é um dia: tarefas concluídas + hábitos cumpridos.</p>
+  <div class="table-wrap">{{ heatmap(heat_columns, heat_months) }}</div>
+</section>
+<div id="tip" class="tip" role="status" hidden></div>
+<script>
+  document.querySelectorAll("select.autosubmit").forEach((s) => s.addEventListener("change", () => s.form.submit()));
+</script>
+{% endblock %}

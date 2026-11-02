@@ -24,11 +24,11 @@ Estimates are rough and only meant to size the work.
 - [x] Default habit set on first run, fully editable
 
 ## v0.4 — Metrics (~5h)
-- [ ] Dashboard: completion rate per week over time
-- [ ] Completion by weekday (which days slip?)
-- [ ] Habit streaks and best streak
-- [ ] Minutes per habit per week; average water per day
-- [ ] Year heatmap
+- [x] Dashboard: completion rate per week over time (4 / 12 / 26 / 52 weeks)
+- [x] Completion by weekday (which days slip?)
+- [x] Habit streaks and best streak
+- [x] Minutes per habit per week; average water per day
+- [x] Year heatmap
 - [ ] CSV / JSON export
 
 ## v0.5 — Notifications and PWA (~6h)

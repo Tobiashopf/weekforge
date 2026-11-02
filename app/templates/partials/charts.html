@@ -1,0 +1,69 @@
+{#
+  Server-rendered SVG charts. Single series, so no legend box: the card title names it.
+  Specs: bars <= 24px, 4px rounded data-end, square at the baseline; hairline grid;
+  value label only on the latest bar; every bar has a hover/focus tooltip (data-tip,
+  wired in app.js) and the same numbers are in a table view below the chart.
+
+  points: list of (label, value 0..100 or None, tooltip text)
+#}
+{% macro column_chart(points, aria_label, show_every=1) %}
+{% set W, H = 600, 210 %}
+{% set L, R, T, B = 40, 8, 22, 26 %}
+{% set pw, ph = W - L - R, H - T - B %}
+{% set n = points | length %}
+{% set band = pw / n %}
+{% set bw = [24, band * 0.6] | min %}
+{% set ns = namespace(last=-1) %}
+{% for p in points %}{% if p[1] is not none %}{% set ns.last = loop.index0 %}{% endif %}{% endfor %}
+<svg class="chart" viewBox="0 0 {{ W }} {{ H }}" role="img" aria-label="{{ aria_label }}">
+  {% for tick in [0, 50, 100] %}
+  {% set y = T + ph - tick / 100 * ph %}
+  <line class="grid" x1="{{ (L) | n }}" x2="{{ (W - R) | n }}" y1="{{ (y) | n }}" y2="{{ (y) | n }}"></line>
+  <text class="axis" x="{{ (L - 6) | n }}" y="{{ (y + 4) | n }}" text-anchor="end">{{ tick }}%</text>
+  {% endfor %}
+  {% for label, value, tip in points %}
+  {% set x = L + band * loop.index0 + (band - bw) / 2 %}
+  {% set yb = T + ph %}
+  {% if value is not none and value > 0 %}
+  {% set h = value / 100 * ph %}{% set y = yb - h %}{% set r = [4, h, bw / 2] | min %}
+  <path class="bar" d="M{{ (x) | n }},{{ (yb) | n }} L{{ (x) | n }},{{ (y + r) | n }} Q{{ (x) | n }},{{ (y) | n }} {{ (x + r) | n }},{{ (y) | n }} L{{ (x + bw - r) | n }},{{ (y) | n }} Q{{ (x + bw) | n }},{{ (y) | n }} {{ (x + bw) | n }},{{ (y + r) | n }} L{{ (x + bw) | n }},{{ (yb) | n }} Z"></path>
+  {% endif %}
+  {% if value is not none and loop.index0 == ns.last %}
+  <text class="value" x="{{ (x + bw / 2) | n }}" y="{{ (yb - (value / 100 * ph) - 6) | n }}" text-anchor="middle">{{ value }}%</text>
+  {% endif %}
+  {% if loop.index0 % show_every == 0 or loop.last %}
+  <text class="axis" x="{{ (x + bw / 2) | n }}" y="{{ (H - 8) | n }}" text-anchor="middle">{{ label }}</text>
+  {% endif %}
+  <rect class="hit" x="{{ (L + band * loop.index0) | n }}" y="{{ (T) | n }}" width="{{ (band) | n }}" height="{{ (ph) | n }}"
+        tabindex="0" data-tip="{{ tip }}" aria-label="{{ tip }}"></rect>
+  {% endfor %}
+</svg>
+{% endmacro %}
+
+{% macro heatmap(columns, months) %}
+{% set C, G = 11, 2 %}{% set S = C + G %}
+{% set L, T = 26, 16 %}
+{% set W = L + (columns | length) * S %}{% set H = T + 7 * S %}
+<svg class="chart heat" viewBox="0 0 {{ W }} {{ H }}" width="{{ W }}" height="{{ H }}" role="img"
+     aria-label="Mapa de calor do último ano: tarefas concluídas mais hábitos cumpridos por dia">
+  {% for i, name in months %}<text class="axis" x="{{ (L + i * S) | n }}" y="{{ (T - 5) | n }}">{{ name }}</text>{% endfor %}
+  {% for row, name in [(1, "S"), (3, "Q"), (5, "S")] %}
+  <text class="axis" x="{{ (L - 8) | n }}" y="{{ (T + row * S + C - 2) | n }}" text-anchor="end">{{ name }}</text>
+  {% endfor %}
+  {% for col in columns %}{% set ci = loop.index0 %}
+    {% for cell in col %}{% if not cell.future %}
+    <rect class="hc h{{ cell.level }}" x="{{ (L + ci * S) | n }}" y="{{ (T + loop.index0 * S) | n }}" width="{{ (C) | n }}" height="{{ (C) | n }}" rx="2"
+          tabindex="-1" data-tip="{{ cell.day.strftime('%d/%m/%Y') }}: {{ cell.count }} concluído{{ 's' if cell.count != 1 }}"></rect>
+    {% endif %}{% endfor %}
+  {% endfor %}
+</svg>
+{% set active = [] %}{% for col in columns %}{% for c in col %}{% if c.count and not c.future %}{% set _ = active.append(c) %}{% endif %}{% endfor %}{% endfor %}
+<details><summary>Ver como tabela ({{ active | length }} dias ativos)</summary>
+  <table class="data"><thead><tr><th>Dia</th><th>Concluídos</th></tr></thead><tbody>
+  {% for c in active | reverse %}<tr><td>{{ c.day.strftime('%d/%m/%Y') }}</td><td>{{ c.count }}</td></tr>
+  {% else %}<tr><td colspan="2" class="hint">Nenhum dia com atividade ainda.</td></tr>{% endfor %}
+  </tbody></table></details>
+<div class="heat-legend" aria-hidden="true">
+  <span>Menos</span>{% for i in range(5) %}<i class="h{{ i }}"></i>{% endfor %}<span>Mais</span>
+</div>
+{% endmacro %}
