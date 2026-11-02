@@ -13,6 +13,7 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 # (table, column, DDL). Replace with Alembic migrations once the schema grows.
 _ADDED_COLUMNS = [
     ("task", "carried", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("task", "recurring_id", "INTEGER"),
 ]
 
 

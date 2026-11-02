@@ -13,9 +13,14 @@ from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
 from app.db import get_session, init_db
-from app.models import Task, Week
+from app.models import RecurringTask, Task, Week
 from app.services import (
+    WEEKDAY_LETTERS,
     carry_over,
+    create_rule,
+    delete_rule,
+    describe_weekdays,
+    today,
     get_or_create_week,
     parse_quick_time,
     sort_tasks,
@@ -39,7 +44,7 @@ app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 
 @app.get("/", response_class=RedirectResponse)
 def index():
-    return RedirectResponse(f"/week/{date.today().isoformat()}")
+    return RedirectResponse(f"/week/{today().isoformat()}")
 
 
 @app.get("/week/{day}", response_class=HTMLResponse)
@@ -260,3 +265,52 @@ def _task_response(request: Request, session: Session, task: Task) -> HTMLRespon
         "partials/task_oob.html",
         {"task": task, "perf": week_performance(session, week)},
     )
+
+
+# --- recurring tasks ------------------------------------------------------------
+
+
+def _recurring_page(request: Request, session: Session, error: str = "", status_code: int = 200):
+    rules = session.exec(select(RecurringTask).order_by(RecurringTask.id)).all()
+    return templates.TemplateResponse(
+        request,
+        "recurring.html",
+        {
+            "rules": rules,
+            "letters": WEEKDAY_LETTERS,
+            "describe": describe_weekdays,
+            "error": error,
+            "this_week": today().isoformat(),
+        },
+        status_code=status_code,
+    )
+
+
+@app.get("/recurring", response_class=HTMLResponse)
+def recurring_list(request: Request, session: Session = Depends(get_session)):
+    return _recurring_page(request, session)
+
+
+@app.post("/recurring", response_class=HTMLResponse)
+async def recurring_create(request: Request, session: Session = Depends(get_session)):
+    form = await request.form()
+    title = str(form.get("title", "")).strip()
+    try:
+        weekdays = sorted({int(v) for v in form.getlist("weekdays")})
+    except ValueError:
+        weekdays = []
+    if not title or not weekdays or any(not 0 <= d <= 6 for d in weekdays):
+        return _recurring_page(
+            request, session, error="Informe um título e pelo menos um dia.", status_code=422
+        )
+    create_rule(session, title, weekdays)
+    return RedirectResponse("/recurring", status_code=303)
+
+
+@app.post("/recurring/{rule_id}/delete", response_class=HTMLResponse)
+def recurring_delete(rule_id: int, session: Session = Depends(get_session)):
+    rule = session.get(RecurringTask, rule_id)
+    if rule is None:
+        raise HTTPException(404)
+    delete_rule(session, rule)
+    return RedirectResponse("/recurring", status_code=303)

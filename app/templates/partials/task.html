@@ -4,6 +4,7 @@
           aria-label="{{ 'Desmarcar' if task.done else 'Concluir' }} {{ task.title }}">
     {% if task.done %}✓{% endif %}
   </button>
+  {% if task.recurring_id %}<span class="rec" title="Tarefa recorrente">↻</span>{% endif %}
   {% if task.due_time %}<time class="due">{{ task.due_time.strftime('%H:%M') }}</time>{% endif %}
   <span class="title" hx-get="/tasks/{{ task.id }}/edit" hx-trigger="dblclick"
         hx-target="#task-{{ task.id }}" hx-swap="outerHTML"

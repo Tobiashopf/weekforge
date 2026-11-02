@@ -14,7 +14,7 @@ Estimates are rough and only meant to size the work.
 - [x] Move tasks between days and from the backlog to a day (drag and drop)
 - [x] Optional time on a task (quick entry "14h …", sorted by time)
 - [x] Carry unfinished tasks over to the next week
-- [ ] Recurring tasks (every weekday, every Monday…)
+- [x] Recurring tasks (every weekday, every Monday…)
 - [ ] Week notes and weekly reminders fields
 
 ## v0.3 — Habits (~5h)

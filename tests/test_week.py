@@ -338,5 +338,120 @@ def test_migration_adds_carried_column_to_old_database(tmp_path):
     init_db(eng)  # idempotent
     with eng.begin() as conn:
         cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(task)")}
-        assert "carried" in cols
+        assert {"carried", "recurring_id"} <= cols
         assert conn.exec_driver_sql("SELECT carried FROM task").scalar() == 0
+
+
+# --- recurring tasks ----------------------------------------------------------
+
+from datetime import date as _date  # noqa: E402
+
+from app import main as _main  # noqa: E402
+from app import services as _services  # noqa: E402
+
+
+@pytest.fixture
+def today_is(monkeypatch):
+    """Pin 'today' for both the services and the index route."""
+    def pin(d: str):
+        value = _date.fromisoformat(d)
+        monkeypatch.setattr(_services, "today", lambda: value)
+        monkeypatch.setattr(_main, "today", lambda: value)
+    return pin
+
+
+def _create_rule(client, title, days):
+    return client.post("/recurring", data={"title": title, "weekdays": [str(d) for d in days]},
+                       follow_redirects=False)
+
+
+def test_rule_fills_current_week_from_today_only(client, today_is):
+    today_is("2026-11-04")  # Wednesday
+    r = _create_rule(client, "7h Treino", [1, 3, 5])  # Mon, Wed, Fri
+    assert r.status_code == 303
+    page = client.get("/week/2026-11-01").text
+    assert "Treino" not in _day_section(page, "2026-11-02")      # Monday already passed
+    assert "07:00" in _day_section(page, "2026-11-04")           # today
+    assert "Treino" in _day_section(page, "2026-11-06")          # Friday
+    assert page.count('class="rec"') == 2
+
+
+def test_new_week_is_created_with_recurring_tasks(client, today_is):
+    today_is("2026-11-01")
+    _create_rule(client, "Inglês", list(range(7)))
+    nxt = client.get("/week/2026-11-08").text
+    assert nxt.count(">Inglês") == 7
+
+
+def test_rule_also_fills_future_weeks_already_open(client, today_is):
+    today_is("2026-11-01")
+    client.get("/week/2026-11-15")  # open a future week first
+    _create_rule(client, "Revisão semanal", [0])
+    assert "Revisão semanal" in _day_section(client.get("/week/2026-11-15").text, "2026-11-15")
+
+
+def test_past_weeks_are_never_backfilled(client, today_is):
+    today_is("2026-11-04")
+    _create_rule(client, "Treino", [1, 3, 5])
+    old = client.get("/week/2026-10-25").text  # week created after the rule, but in the past
+    assert "Treino" not in old
+
+
+def test_occurrence_can_be_deleted_and_does_not_come_back(client, today_is):
+    today_is("2026-11-01")
+    _create_rule(client, "Treino", [1])
+    page = client.get("/week/2026-11-01").text
+    task_id = page.split('class="rec"')[0].rsplit('id="task-', 1)[1].split('"')[0]
+    client.delete(f"/tasks/{task_id}")
+    assert "Treino" not in client.get("/week/2026-11-01").text
+
+
+def test_recurring_tasks_are_not_carried_over(client, today_is):
+    today_is("2026-11-01")
+    _create_rule(client, "Treino", [1])
+    page = client.get("/week/2026-11-01").text
+    assert "Levar" not in page
+
+
+def test_delete_rule_removes_future_undone_keeps_history(client, today_is):
+    today_is("2026-11-01")
+    _create_rule(client, "Treino", [1, 3])        # Mon 02/11 and Wed 04/11
+    page = client.get("/week/2026-11-01").text
+    mon_id = _day_section(page, "2026-11-02").split('id="task-')[1].split('"')[0]
+    client.post(f"/tasks/{mon_id}/toggle")         # Monday done
+    client.get("/week/2026-11-08")                  # next week has its own
+
+    today_is("2026-11-03")                          # Tuesday: delete the rule
+    r = client.post("/recurring/1/delete", follow_redirects=False)
+    assert r.status_code == 303
+    cur = client.get("/week/2026-11-01").text
+    assert "Treino" in _day_section(cur, "2026-11-02")       # done one kept
+    assert "Treino" not in _day_section(cur, "2026-11-04")   # future undone removed
+    assert "Treino" not in client.get("/week/2026-11-08").text
+    assert 'class="rec"' not in cur                          # history detached from rule
+    assert "Nenhuma regra" in client.get("/recurring").text
+
+
+@pytest.mark.parametrize(
+    "data",
+    [{"title": "", "weekdays": ["1"]}, {"title": "Treino"}, {"title": "Treino", "weekdays": ["9"]},
+     {"title": "Treino", "weekdays": ["x"]}],
+)
+def test_invalid_rule_is_rejected(client, data):
+    r = client.post("/recurring", data=data)
+    assert r.status_code == 422
+    assert "pelo menos um dia" in r.text
+
+
+def test_recurring_page_lists_rules(client, today_is):
+    today_is("2026-11-01")
+    _create_rule(client, "18h Academia", [1, 2, 3, 4, 5])
+    page = client.get("/recurring").text
+    assert "Academia" in page and "18:00" in page and "Seg a sex" in page
+
+
+def test_rule_title_with_quote_is_escaped(client, today_is):
+    today_is("2026-11-01")
+    _create_rule(client, "Ler o livro do D'Ávila", [1])
+    page = client.get("/recurring").text
+    assert "D&#39;Ávila" in page and "onsubmit" not in page

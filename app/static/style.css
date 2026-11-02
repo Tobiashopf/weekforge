@@ -82,3 +82,35 @@ input.time { width: auto; flex: none; }
 .perf .muted dt, .perf .muted dd { color: var(--muted); font-weight: 400; }
 .task.carried:not(.done) .title { color: var(--muted); }
 .carried-tag { font-size: .72rem; color: var(--muted); white-space: nowrap; }
+
+/* nav */
+.topbar { display: flex; align-items: center; gap: 20px; }
+.topbar nav { display: flex; gap: 14px; }
+.topbar nav a { color: var(--muted); text-decoration: none; font-size: .95rem; }
+.topbar nav a:hover { color: var(--ink); }
+
+/* recurring */
+.rec { color: var(--muted); font-size: .85rem; flex: none; }
+.hint { color: var(--muted); margin: 6px 0 16px; }
+.error { color: #c0392b; margin: 0 0 8px; }
+.layout.recurring { grid-template-columns: 340px 1fr; align-items: start; }
+@media (max-width: 800px) { .layout.recurring { grid-template-columns: 1fr; } }
+.rule-form { display: flex; flex-direction: column; gap: 10px; }
+.weekdays { border: 0; padding: 0; margin: 0; display: flex; gap: 6px; }
+.weekdays legend { font-size: .85rem; color: var(--muted); margin-bottom: 6px; }
+.weekdays label { position: relative; }
+.weekdays input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.weekdays span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+                 border: 1px solid var(--line); font-weight: 700; }
+.weekdays input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.weekdays input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.presets button { font: inherit; font-size: .8rem; background: none; border: 1px solid var(--line);
+                  color: var(--muted); border-radius: 99px; padding: 3px 10px; cursor: pointer; }
+.presets button:hover { color: var(--ink); border-color: var(--ink); }
+.rules { list-style: none; margin: 0 0 12px; padding: 0; }
+.rules li { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.rules .title { flex: 1; }
+.rules .days { color: var(--muted); }
+.rules form { margin: 0; }
+.card a { color: var(--accent); }

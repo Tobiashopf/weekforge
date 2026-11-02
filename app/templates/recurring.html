@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Recorrentes · Weekforge{% endblock %}
+{% block content %}
+<section class="week-head">
+  <h1>Tarefas recorrentes</h1>
+</section>
+<p class="hint">Cada regra cria a tarefa nos dias marcados, a partir de hoje e em toda semana nova.
+  Na agenda, elas aparecem com ↻ e podem ser concluídas, movidas ou apagadas uma a uma.</p>
+
+<div class="layout recurring">
+  <section class="card">
+    <h2>Nova regra</h2>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/recurring" class="rule-form">
+      <input name="title" required placeholder="ex.: 7h Treino" aria-label="Título (pode começar com horário)">
+      <fieldset class="weekdays">
+        <legend>Dias</legend>
+        {% for letter in letters %}
+        <label title="{{ ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][loop.index0] }}">
+          <input type="checkbox" name="weekdays" value="{{ loop.index0 }}"><span>{{ letter }}</span>
+        </label>
+        {% endfor %}
+      </fieldset>
+      <div class="presets">
+        <button type="button" data-days="1,2,3,4,5">Seg a sex</button>
+        <button type="button" data-days="0,1,2,3,4,5,6">Todo dia</button>
+        <button type="button" data-days="0,6">Fim de semana</button>
+      </div>
+      <button type="submit" class="save">Criar regra</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Regras ativas</h2>
+    {% if not rules %}<p class="hint">Nenhuma regra ainda.</p>{% endif %}
+    <ul class="rules">
+      {% for rule in rules %}
+      <li>
+        {% if rule.due_time %}<time class="due">{{ rule.due_time.strftime('%H:%M') }}</time>{% endif %}
+        <span class="title">{{ rule.title }}</span>
+        <small class="days">{{ describe(rule.day_indexes) }}</small>
+        <form method="post" action="/recurring/{{ rule.id }}/delete" class="confirm"
+              data-confirm="Apagar a regra &quot;{{ rule.title }}&quot;? As próximas ocorrências não feitas serão removidas; o histórico fica.">
+          <button class="icon danger" aria-label="Apagar regra {{ rule.title }}">×</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    <p><a href="/week/{{ this_week }}">← Voltar para a semana</a></p>
+  </section>
+</div>
+<script>
+  document.querySelectorAll("form.confirm").forEach((f) => f.addEventListener("submit", (e) => {
+    if (!confirm(f.dataset.confirm)) e.preventDefault();
+  }));
+  document.querySelectorAll(".presets button").forEach((b) => b.addEventListener("click", () => {
+    const days = b.dataset.days.split(",");
+    document.querySelectorAll(".weekdays input").forEach((cb) => { cb.checked = days.includes(cb.value); });
+  }));
+</script>
+{% endblock %}

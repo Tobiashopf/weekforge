@@ -27,7 +27,22 @@ class Task(SQLModel, table=True):
     due_time: Optional[time] = None
     done: bool = False
     carried: bool = False  # copied to the next week's to-do as unfinished
+    recurring_id: Optional[int] = Field(default=None, index=True)  # set if created by a RecurringTask
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class RecurringTask(SQLModel, table=True):
+    """A rule that creates a task on the chosen weekdays of every week."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    title: str
+    due_time: Optional[time] = None
+    weekdays: str  # comma-separated indexes, 0 = Sunday ... 6 = Saturday, e.g. "1,3,5"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @property
+    def day_indexes(self) -> list[int]:
+        return sorted(int(x) for x in self.weekdays.split(",") if x != "")
 
 
 class HabitKind(str, Enum):

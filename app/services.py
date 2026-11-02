@@ -8,7 +8,7 @@ from typing import Optional
 
 from sqlmodel import Session, select
 
-from app.models import Task, Week
+from app.models import RecurringTask, Task, Week
 
 DAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"]
 
@@ -19,6 +19,11 @@ def week_start(d: date) -> date:
     return d - timedelta(days=(d.weekday() + 1) % 7)
 
 
+def today() -> date:
+    """Current date; a function so tests can pin it."""
+    return date.today()
+
+
 def get_or_create_week(session: Session, d: date) -> Week:
     start = week_start(d)
     week = session.exec(select(Week).where(Week.start_date == start)).first()
@@ -27,6 +32,10 @@ def get_or_create_week(session: Session, d: date) -> Week:
         session.add(week)
         session.commit()
         session.refresh(week)
+        # A new week gets its recurring tasks (never back-filled into past days).
+        for rule in session.exec(select(RecurringTask)).all():
+            apply_rule_to_week(session, rule, week)
+        session.commit()
     return week
 
 
@@ -64,7 +73,7 @@ def week_performance(session: Session, week: Week) -> Performance:
         pending=len(scheduled) - done,
         week_id=week.id,
         carried=sum(1 for t in scheduled if t.carried),
-        carryable=sum(1 for t in tasks if not t.done and not t.carried),
+        carryable=sum(1 for t in tasks if not t.done and not t.carried and t.recurring_id is None),
     )
 
 
@@ -78,7 +87,12 @@ def carry_over(session: Session, week: Week) -> tuple[Week, int]:
     """
     next_week = get_or_create_week(session, week.start_date + timedelta(days=7))
     tasks = session.exec(
-        select(Task).where(Task.week_id == week.id, Task.done == False, Task.carried == False)  # noqa: E712
+        select(Task).where(
+            Task.week_id == week.id,
+            Task.done == False,  # noqa: E712
+            Task.carried == False,  # noqa: E712
+            Task.recurring_id.is_(None),  # recurring tasks come back on their own
+        )
     ).all()
     for task in sort_tasks(tasks):
         if task.day is None:
@@ -114,3 +128,69 @@ def parse_quick_time(title: str) -> tuple[Optional[time], str]:
 def sort_tasks(tasks: list[Task]) -> list[Task]:
     """Timed tasks first, in time order; untimed after, in creation order."""
     return sorted(tasks, key=lambda t: (t.due_time is None, t.due_time or time.min, t.id or 0))
+
+
+# --- recurring tasks ------------------------------------------------------------
+
+
+def apply_rule_to_week(session: Session, rule: RecurringTask, week: Week) -> int:
+    """Create the rule's tasks in `week`, from today on. Skips days that already have one."""
+    created = 0
+    for i in rule.day_indexes:
+        d = week.start_date + timedelta(days=i)
+        if d < today():
+            continue
+        exists = session.exec(
+            select(Task).where(Task.recurring_id == rule.id, Task.day == d)
+        ).first()
+        if exists is None:
+            session.add(
+                Task(week_id=week.id, title=rule.title, day=d, due_time=rule.due_time, recurring_id=rule.id)
+            )
+            created += 1
+    return created
+
+
+def create_rule(session: Session, title: str, weekdays: list[int]) -> RecurringTask:
+    """Save a rule and fill the current week (from today) and any future weeks already open."""
+    due_time, clean = parse_quick_time(title)
+    rule = RecurringTask(
+        title=clean, due_time=due_time, weekdays=",".join(str(i) for i in sorted(set(weekdays)))
+    )
+    session.add(rule)
+    session.commit()
+    session.refresh(rule)
+    current = get_or_create_week(session, today())
+    weeks = session.exec(select(Week).where(Week.start_date >= current.start_date)).all()
+    for week in weeks:
+        apply_rule_to_week(session, rule, week)
+    session.commit()
+    return rule
+
+
+def delete_rule(session: Session, rule: RecurringTask) -> int:
+    """Delete a rule and its unfinished tasks from today on; past and done ones stay as history."""
+    removed = 0
+    for task in session.exec(select(Task).where(Task.recurring_id == rule.id)).all():
+        if not task.done and task.day is not None and task.day >= today():
+            session.delete(task)
+            removed += 1
+        else:
+            task.recurring_id = None
+            session.add(task)
+    session.delete(rule)
+    session.commit()
+    return removed
+
+
+WEEKDAY_LETTERS = ["D", "S", "T", "Q", "Q", "S", "S"]
+
+
+def describe_weekdays(indexes: list[int]) -> str:
+    if indexes == list(range(7)):
+        return "Todo dia"
+    if indexes == [1, 2, 3, 4, 5]:
+        return "Seg a sex"
+    if indexes == [0, 6]:
+        return "Fins de semana"
+    return ", ".join(DAY_LABELS[i].capitalize() for i in indexes)
