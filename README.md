@@ -25,10 +25,15 @@ Weekforge started as a replacement for my own paper weekly planner. It keeps the
 - Metrics page: completion per week (4 to 52 weeks) and per weekday, habit streaks and records, a year heatmap; every chart has a hover/keyboard tooltip and a table view
 - Export: tasks and habits as CSV (safe against spreadsheet formula injection), full backup as JSON
 
-**Planned** (see [ROADMAP.md](ROADMAP.md))
-- Push notifications: task reminders, habit nudges, water reminders, Sunday planning and weekly review
-- Installable PWA with offline support
-- Weekly review, Docker image, proper database migrations
+**Notifications**
+- Installable as an app (PWA); Web Push to each device you enable, with keys generated on first run
+
+**Planned** (about 34 hours, see [ROADMAP.md](ROADMAP.md))
+- Reminders: tasks at their time, habits still open in the evening, water, Sunday planning, quiet hours
+- Gamification: weekly targets per habit, XP per week (100 for a perfect week), levels, achievements, streak protection
+- History: best weeks of the year, a progress page, habit strength
+- Focus timer that feeds habit minutes, a guided weekly review
+- Offline mode, Docker, Alembic migrations, restore from backup
 
 ## Built with
 
