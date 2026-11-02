@@ -7,16 +7,17 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
 from app import db as _db
 from app import export as _export
+from app import push as _push
 from app import metrics as _metrics
 from app.db import get_session, init_db
-from app.models import Habit, HabitKind, RecurringTask, Task, Week
+from app.models import Habit, HabitKind, PushSubscription, RecurringTask, Task, Week
 from app.services import (
     habit_row,
     habit_rows,
@@ -40,6 +41,19 @@ BASE = Path(__file__).parent
 templates = Jinja2Templates(directory=BASE / "templates")
 # Compact numbers for SVG coordinates: 12.3456 -> "12.3", 20.0 -> "20".
 templates.env.filters["n"] = lambda v: f"{v:.1f}".rstrip("0").rstrip(".")
+
+
+def _device_name(user_agent: str) -> str:
+    """A friendly label for a push device from its User-Agent (no other data is kept)."""
+    ua = user_agent or ""
+    os_name = next((n for k, n in [("Android", "Android"), ("iPhone", "iPhone"), ("iPad", "iPad"),
+                                   ("Windows", "Windows"), ("Mac OS", "Mac"), ("Linux", "Linux")] if k in ua), "")
+    browser = next((n for k, n in [("Edg/", "Edge"), ("Firefox/", "Firefox"), ("Chrome/", "Chrome"),
+                                   ("Safari/", "Safari")] if k in ua), "Navegador")
+    return f"{browser} · {os_name}" if os_name else browser
+
+
+templates.env.filters["device_name"] = _device_name
 
 
 @asynccontextmanager
@@ -545,3 +559,76 @@ def export_json(session: Session = Depends(get_session)):
     response = JSONResponse(_export.full_backup(session))
     response.headers["Content-Disposition"] = f'attachment; filename="weekforge-backup-{today().isoformat()}.json"'
     return response
+
+
+# --- PWA and notifications -----------------------------------------------------------
+
+
+@app.get("/sw.js")
+def service_worker():
+    # Served from the root so its scope covers the whole app.
+    return FileResponse(
+        BASE / "static" / "sw.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+    )
+
+
+@app.get("/notifications", response_class=HTMLResponse)
+def notifications_page(request: Request, session: Session = Depends(get_session)):
+    devices = session.exec(select(PushSubscription).order_by(PushSubscription.id)).all()
+    return templates.TemplateResponse(request, "notifications.html", {"devices": devices})
+
+
+@app.get("/push/public-key")
+def push_public_key(session: Session = Depends(get_session)):
+    return {"publicKey": _push.vapid_keys(session).public_raw}
+
+
+def _valid_subscription(data) -> tuple[str, str, str]:
+    try:
+        endpoint = str(data["endpoint"])
+        p256dh, auth = str(data["keys"]["p256dh"]), str(data["keys"]["auth"])
+    except (KeyError, TypeError):
+        raise HTTPException(422, "Invalid subscription")
+    if not endpoint.startswith("https://") or len(endpoint) > 1000 or not (0 < len(p256dh) <= 200 and 0 < len(auth) <= 100):
+        raise HTTPException(422, "Invalid subscription")
+    return endpoint, p256dh, auth
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: Request, session: Session = Depends(get_session)):
+    try:
+        data = await request.json()
+    except ValueError:
+        raise HTTPException(422, "Invalid JSON")
+    endpoint, p256dh, auth = _valid_subscription(data)
+    sub = _push.save_subscription(session, endpoint, p256dh, auth, request.headers.get("user-agent", ""))
+    return {"id": sub.id}
+
+
+@app.post("/push/unsubscribe")
+async def push_unsubscribe(request: Request, session: Session = Depends(get_session)):
+    try:
+        endpoint = str((await request.json())["endpoint"])
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(422, "Invalid JSON")
+    return {"removed": _push.remove_subscription(session, endpoint)}
+
+
+@app.post("/push/devices/{device_id}/delete")
+def push_device_delete(device_id: int, session: Session = Depends(get_session)):
+    sub = session.get(PushSubscription, device_id)
+    if sub is None:
+        raise HTTPException(404)
+    session.delete(sub)
+    session.commit()
+    return RedirectResponse("/notifications", status_code=303)
+
+
+@app.post("/push/test")
+def push_test(session: Session = Depends(get_session)):
+    result = _push.send_to_all(
+        session, "Weekforge", "Notificações funcionando. Bom planejamento! 🗓️", url="/", tag="test"
+    )
+    return {"sent": result.sent, "removed": result.removed, "failed": result.failed}

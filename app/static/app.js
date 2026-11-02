@@ -75,3 +75,8 @@
   document.addEventListener("focusout", hide);
   document.addEventListener("scroll", hide, true);
 })();
+
+// Installable app: register the service worker (also needed for notifications).
+if ("serviceWorker" in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}

@@ -75,3 +75,21 @@ class HabitLog(SQLModel, table=True):
     day: date = Field(index=True)
     value: int = 0  # 1 = done for check habits, count for counters
     minutes: int = 0
+
+
+class AppSetting(SQLModel, table=True):
+    """Small key/value store for app-level settings (e.g. generated VAPID keys)."""
+
+    key: str = Field(primary_key=True)
+    value: str
+
+
+class PushSubscription(SQLModel, table=True):
+    """A browser/device that accepted notifications (Web Push subscription)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    endpoint: str = Field(index=True, unique=True)
+    p256dh: str
+    auth: str
+    user_agent: str = ""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

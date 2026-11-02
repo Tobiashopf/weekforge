@@ -794,3 +794,106 @@ def test_metrics_page_links_exports(client):
     page = client.get("/metrics").text
     for href in ["/export/tasks.csv", "/export/habits.csv", "/export/weekforge.json"]:
         assert f'href="{href}"' in page
+
+
+# --- PWA and push ------------------------------------------------------------------------
+
+import json as _json  # noqa: E402
+
+from pywebpush import WebPushException  # noqa: E402
+
+from app import push as _push  # noqa: E402
+
+SUB = {"endpoint": "https://push.example.com/abc", "keys": {"p256dh": "BPk3", "auth": "xyz"}}
+
+
+def test_vapid_keys_generated_once_and_persisted(client, monkeypatch):
+    monkeypatch.delenv("VAPID_PRIVATE_KEY", raising=False)
+    k1 = client.get("/push/public-key").json()["publicKey"]
+    k2 = client.get("/push/public-key").json()["publicKey"]
+    assert k1 == k2
+    raw = __import__("base64").urlsafe_b64decode(k1 + "=" * (-len(k1) % 4))
+    assert len(raw) == 65 and raw[0] == 4  # uncompressed P-256 point, what browsers expect
+
+
+def test_vapid_keys_from_environment(client, monkeypatch):
+    monkeypatch.setenv("VAPID_PRIVATE_KEY", "priv-from-env")
+    monkeypatch.setenv("VAPID_PUBLIC_KEY", "pub-from-env")
+    assert client.get("/push/public-key").json()["publicKey"] == "pub-from-env"
+
+
+def test_subscribe_upserts_and_unsubscribe(client):
+    assert client.post("/push/subscribe", json=SUB, headers={"user-agent": "Mozilla Android Chrome/130"}).status_code == 200
+    client.post("/push/subscribe", json={**SUB, "keys": {"p256dh": "NEW", "auth": "new"}})  # same device again
+    page = client.get("/notifications").text
+    assert page.count('action="/push/devices/') == 1
+    assert "Chrome · Android" in page
+    assert client.post("/push/unsubscribe", json={"endpoint": SUB["endpoint"]}).json() == {"removed": True}
+    assert "Nenhum ainda" in client.get("/notifications").text
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{}, {"endpoint": "http://insecure.example.com/x", "keys": {"p256dh": "a", "auth": "b"}},
+     {"endpoint": "https://ok.example.com", "keys": {}}, {"endpoint": "https://x", "keys": {"p256dh": "", "auth": "b"}}],
+)
+def test_invalid_subscription_rejected(client, body):
+    assert client.post("/push/subscribe", json=body).status_code == 422
+
+
+def test_send_test_counts_and_prunes_gone_devices(client, monkeypatch):
+    client.post("/push/subscribe", json=SUB)
+    client.post("/push/subscribe", json={**SUB, "endpoint": "https://push.example.com/gone"})
+    client.post("/push/subscribe", json={**SUB, "endpoint": "https://push.example.com/flaky"})
+    sent = []
+
+    class Resp:
+        def __init__(self, code): self.status_code = code
+
+    def fake_webpush(info, data, **kw):
+        if info["endpoint"].endswith("gone"):
+            raise WebPushException("gone", response=Resp(410))
+        if info["endpoint"].endswith("flaky"):
+            raise WebPushException("boom", response=Resp(500))
+        sent.append(_json.loads(data))
+
+    monkeypatch.setattr(_push, "webpush", fake_webpush)
+    assert client.post("/push/test").json() == {"sent": 1, "removed": 1, "failed": 1}
+    assert sent[0]["title"] == "Weekforge" and sent[0]["url"] == "/"
+    page = client.get("/notifications").text
+    assert page.count('action="/push/devices/') == 2  # the 410 one was removed, the flaky one kept
+
+
+def test_delete_device_from_list(client):
+    client.post("/push/subscribe", json=SUB)
+    r = client.post("/push/devices/1/delete", follow_redirects=False)
+    assert r.status_code == 303
+    assert client.post("/push/devices/1/delete").status_code == 404
+
+
+def test_service_worker_served_from_root(client):
+    r = client.get("/sw.js")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/javascript")
+    assert r.headers["service-worker-allowed"] == "/"
+    assert 'addEventListener("push"' in r.text
+
+
+def test_manifest_and_icons(client):
+    m = client.get("/static/manifest.webmanifest").json()
+    assert m["start_url"] == "/" and m["display"] == "standalone"
+    for icon in m["icons"]:
+        assert client.get(icon["src"]).status_code == 200
+    page = client.get("/week/2026-11-01").text
+    assert 'rel="manifest"' in page and 'name="theme-color"' in page
+
+
+@pytest.mark.parametrize(
+    "ua, expected",
+    [("Mozilla/5.0 (Linux; Android 14) Chrome/130.0 Mobile Safari/537.36", "Chrome · Android"),
+     ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Version/18.0 Mobile/15E148 Safari/604.1", "Safari · iPhone"),
+     ("Mozilla/5.0 (Windows NT 10.0) Chrome/130.0 Safari/537.36 Edg/130.0", "Edge · Windows"),
+     ("", "Navegador")],
+)
+def test_device_name(ua, expected):
+    assert _main._device_name(ua) == expected

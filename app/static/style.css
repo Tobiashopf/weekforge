@@ -214,3 +214,9 @@ table.data tbody th { font-weight: 500; white-space: nowrap; }
 .downloads { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .downloads small { color: var(--muted); margin-left: 6px; }
 code { font-size: .85em; background: var(--line); border-radius: 4px; padding: 1px 4px; }
+
+/* notifications */
+.push-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 8px 0; }
+.push-actions .carry { width: auto; margin-top: 4px; padding: 8px 14px; }
+.push-actions .carry:disabled { opacity: .45; cursor: not-allowed; }
+.status-line { margin: 0; }

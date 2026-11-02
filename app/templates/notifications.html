@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Notificações · Weekforge{% endblock %}
+{% block content %}
+<section class="week-head"><h1>Notificações</h1></section>
+<p class="hint">Ative em cada dispositivo onde quer receber lembretes. Os lembretes automáticos
+  (tarefas, hábitos, água e planejamento de domingo) chegam na próxima versão; por enquanto dá para ativar e testar.</p>
+
+<div class="layout recurring">
+  <section class="card">
+    <h2>Este dispositivo</h2>
+    <p id="push-status" class="status-line" role="status">Verificando…</p>
+    <div class="push-actions">
+      <button id="push-enable" class="save" hidden>Ativar notificações</button>
+      <button id="push-disable" class="link" hidden>Desativar neste dispositivo</button>
+      <button id="push-test" class="carry" disabled>Enviar notificação de teste</button>
+    </div>
+    <details>
+      <summary>Usar no celular</summary>
+      <p class="hint small">O celular precisa abrir o Weekforge por <strong>HTTPS</strong> (por exemplo, rodando num
+        servidor ou com um túnel). No Android, use "Instalar app" no menu do Chrome; no iPhone, "Adicionar à Tela de Início"
+        no Safari e depois ative aqui, de dentro do app instalado.</p>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>Dispositivos ativos</h2>
+    {% if not devices %}<p class="hint">Nenhum ainda.</p>{% endif %}
+    <ul class="rules">
+      {% for d in devices %}
+      <li>
+        <span class="title">{{ d.user_agent | device_name }}</span>
+        <small class="days">desde {{ d.created_at.strftime('%d/%m/%Y') }}</small>
+        <form method="post" action="/push/devices/{{ d.id }}/delete" class="confirm" data-confirm="Remover este dispositivo?">
+          <button class="icon danger" aria-label="Remover dispositivo">×</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+<script src="/static/push.js" defer></script>
+<script>
+  document.querySelectorAll("form.confirm").forEach((f) => f.addEventListener("submit", (e) => {
+    if (!confirm(f.dataset.confirm)) e.preventDefault();
+  }));
+</script>
+{% endblock %}

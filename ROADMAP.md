@@ -32,8 +32,8 @@ Estimates are rough and only meant to size the work.
 - [x] CSV / JSON export
 
 ## v0.5 — Notifications and PWA (~6h)
-- [ ] Web app manifest and service worker (installable on phone and desktop)
-- [ ] Web Push with VAPID keys (keys only in `.env`)
+- [x] Web app manifest and service worker (installable on phone and desktop)
+- [x] Web Push with VAPID keys (generated on first use or from `.env`), per-device subscribe and test
 - [ ] Scheduler for: task reminders, evening "habits still open" nudge, water reminders at an interval, Sunday planning prompt, weekly review prompt
 - [ ] Notification settings page (quiet hours, which reminders are on)
 - [ ] Offline support for the current week
