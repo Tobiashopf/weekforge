@@ -9,13 +9,13 @@ Estimates are rough and only meant to size the work.
 - [x] Weekly performance (done / pending / total, %)
 - [x] Test suite and CI
 
-## v0.2 — Tasks, complete (~4h)
+## v0.2 — Tasks, complete (done)
 - [x] Edit and delete tasks
 - [x] Move tasks between days and from the backlog to a day (drag and drop)
 - [x] Optional time on a task (quick entry "14h …", sorted by time)
 - [x] Carry unfinished tasks over to the next week
 - [x] Recurring tasks (every weekday, every Monday…)
-- [ ] Week notes and weekly reminders fields
+- [x] Week notes and weekly reminders fields (autosave)
 
 ## v0.3 — Habits (~5h)
 - [ ] Habit settings: name, type (check / counter), daily target, active

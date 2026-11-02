@@ -39,6 +39,18 @@
         <input name="title" placeholder="+ pendência" required aria-label="Nova pendência">
       </form>
     </section>
+
+    {% for field, label, placeholder in [
+         ("reminders", "Lembretes da semana", "Pagar conta de luz até quinta…"),
+         ("notes", "Notas", "Qualquer coisa que queira registrar nesta semana…")] %}
+    <section class="card week-text">
+      <h2><label for="{{ field }}">{{ label }}</label></h2>
+      <textarea id="{{ field }}" name="{{ field }}" rows="4" maxlength="10000" placeholder="{{ placeholder }}"
+                hx-post="/week/{{ week.id }}/text" hx-trigger="input changed delay:800ms, blur changed"
+                hx-target="#{{ field }}-status" hx-swap="innerHTML">{{ week[field] }}</textarea>
+      <small id="{{ field }}-status" class="status" aria-live="polite"></small>
+    </section>
+    {% endfor %}
   </aside>
 </div>
 {% endblock %}

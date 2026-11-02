@@ -14,6 +14,7 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 _ADDED_COLUMNS = [
     ("task", "carried", "BOOLEAN NOT NULL DEFAULT 0"),
     ("task", "recurring_id", "INTEGER"),
+    ("week", "reminders", "VARCHAR NOT NULL DEFAULT ''"),
 ]
 
 

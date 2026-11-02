@@ -339,6 +339,8 @@ def test_migration_adds_carried_column_to_old_database(tmp_path):
     with eng.begin() as conn:
         cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(task)")}
         assert {"carried", "recurring_id"} <= cols
+        week_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(week)")}
+        assert "reminders" in week_cols
         assert conn.exec_driver_sql("SELECT carried FROM task").scalar() == 0
 
 
@@ -455,3 +457,46 @@ def test_rule_title_with_quote_is_escaped(client, today_is):
     _create_rule(client, "Ler o livro do D'Ávila", [1])
     page = client.get("/recurring").text
     assert "D&#39;Ávila" in page and "onsubmit" not in page
+
+
+# --- notes and reminders --------------------------------------------------------
+
+def test_save_notes_and_reminders(client):
+    client.get("/week/2026-11-01")
+    r = client.post("/week/1/text", data={"reminders": "Pagar luz até quinta"})
+    assert r.status_code == 200 and r.text.startswith("Salvo às ")
+    client.post("/week/1/text", data={"notes": "Semana puxada no trabalho"})
+    page = client.get("/week/2026-11-01").text
+    assert ">Pagar luz até quinta</textarea>" in page        # saving notes kept reminders
+    assert ">Semana puxada no trabalho</textarea>" in page
+
+
+def test_empty_text_clears_field(client):
+    """Regression guard: "" must clear, not be ignored (raw form, not Form())."""
+    client.get("/week/2026-11-01")
+    client.post("/week/1/text", data={"notes": "algo"})
+    client.post("/week/1/text", data={"notes": ""})
+    assert ">algo</textarea>" not in client.get("/week/2026-11-01").text
+
+
+def test_text_is_escaped(client):
+    client.get("/week/2026-11-01")
+    client.post("/week/1/text", data={"notes": "<script>alert(1)</script>"})
+    page = client.get("/week/2026-11-01").text
+    assert "<script>alert(1)</script>" not in page
+    assert "&lt;script&gt;" in page
+
+
+def test_text_belongs_to_its_week(client):
+    client.get("/week/2026-11-01")
+    client.post("/week/1/text", data={"reminders": "só desta semana"})
+    assert "só desta semana" not in client.get("/week/2026-11-08").text
+
+
+@pytest.mark.parametrize(
+    "week_id, data, status",
+    [(1, {}, 422), (1, {"focus_word": "x"}, 422), (1, {"notes": "x" * 10_001}, 422), (99, {"notes": "x"}, 404)],
+)
+def test_invalid_text_requests(client, week_id, data, status):
+    client.get("/week/2026-11-01")
+    assert client.post(f"/week/{week_id}/text", data=data).status_code == status

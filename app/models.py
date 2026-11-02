@@ -15,6 +15,7 @@ class Week(SQLModel, table=True):
     start_date: date = Field(index=True, unique=True)  # always a Sunday
     focus_word: str = ""
     notes: str = ""
+    reminders: str = ""
 
 
 class Task(SQLModel, table=True):

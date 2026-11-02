@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -77,6 +77,31 @@ def set_focus(week_id: int, focus_word: str = Form(""), session: Session = Depen
     session.add(week)
     session.commit()
     return HTMLResponse("")
+
+
+_WEEK_TEXT_FIELDS = ("notes", "reminders")
+_WEEK_TEXT_MAX = 10_000
+
+
+@app.post("/week/{week_id}/text", response_class=HTMLResponse)
+async def save_week_text(request: Request, week_id: int, session: Session = Depends(get_session)):
+    """Autosave for the week's notes / reminders. Only fields present in the form change,
+    and "" clears a field (so the raw form is read instead of Form())."""
+    form = await request.form()
+    week = session.get(Week, week_id)
+    if week is None:
+        raise HTTPException(404)
+    fields = [f for f in _WEEK_TEXT_FIELDS if f in form]
+    if not fields:
+        raise HTTPException(422, "Nothing to save")
+    for field in fields:
+        value = str(form[field])
+        if len(value) > _WEEK_TEXT_MAX:
+            raise HTTPException(422, "Text too long")
+        setattr(week, field, value.rstrip())
+    session.add(week)
+    session.commit()
+    return HTMLResponse(f"Salvo às {datetime.now().strftime('%H:%M')}")
 
 
 @app.post("/week/{week_id}/carry-over", response_class=HTMLResponse)

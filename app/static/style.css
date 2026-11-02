@@ -114,3 +114,10 @@ input.time { width: auto; flex: none; }
 .rules .days { color: var(--muted); }
 .rules form { margin: 0; }
 .card a { color: var(--accent); }
+
+/* notes and reminders */
+textarea { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line);
+           border-radius: 8px; padding: 8px 10px; width: 100%; resize: vertical; min-height: 5rem; }
+.week-text h2 label { cursor: text; }
+.status { display: block; min-height: 1.2em; margin-top: 4px; font-size: .75rem; color: var(--muted); }
+.agenda { align-content: start; }
