@@ -8,7 +8,7 @@ from typing import Optional
 
 from sqlmodel import Session, select
 
-from app.models import RecurringTask, Task, Week
+from app.models import Habit, HabitKind, HabitLog, HabitWeek, RecurringTask, Task, Week
 
 DAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"]
 
@@ -194,3 +194,99 @@ def describe_weekdays(indexes: list[int]) -> str:
     if indexes == [0, 6]:
         return "Fins de semana"
     return ", ".join(DAY_LABELS[i].capitalize() for i in indexes)
+
+
+# --- habits ---------------------------------------------------------------------
+
+DEFAULT_HABITS = [
+    ("Meditação", "🧘", HabitKind.check, 1),
+    ("Leitura", "📖", HabitKind.check, 1),
+    ("Atividade física", "🏋️", HabitKind.check, 1),
+    ("Inglês", "🗣️", HabitKind.check, 1),
+    ("Estudar", "📚", HabitKind.check, 1),
+    ("Água", "💧", HabitKind.counter, 8),
+]
+
+
+def seed_default_habits(session: Session) -> None:
+    """First run only: the table is empty. Habits are archived, never deleted, so it stays non-empty."""
+    if session.exec(select(Habit)).first() is not None:
+        return
+    for name, emoji, kind, target in DEFAULT_HABITS:
+        session.add(Habit(name=name, emoji=emoji, kind=kind, daily_target=target))
+    session.commit()
+
+
+@dataclass
+class HabitCell:
+    day: date
+    value: int
+    future: bool
+    met: bool
+
+
+@dataclass
+class HabitRow:
+    habit: Habit
+    week: Week
+    cells: list[HabitCell]
+    minutes: int
+
+    @property
+    def days_met(self) -> int:
+        return sum(1 for c in self.cells if c.met)
+
+
+def habit_row(session: Session, habit: Habit, week: Week) -> HabitRow:
+    end = week.start_date + timedelta(days=6)
+    logs = {
+        log.day: log.value
+        for log in session.exec(
+            select(HabitLog).where(
+                HabitLog.habit_id == habit.id, HabitLog.day >= week.start_date, HabitLog.day <= end
+            )
+        ).all()
+    }
+    target = max(habit.daily_target, 1)
+    cells = []
+    for i in range(7):
+        d = week.start_date + timedelta(days=i)
+        value = logs.get(d, 0)
+        cells.append(HabitCell(day=d, value=value, future=d > today(), met=value >= target))
+    hw = session.exec(
+        select(HabitWeek).where(HabitWeek.habit_id == habit.id, HabitWeek.week_id == week.id)
+    ).first()
+    return HabitRow(habit=habit, week=week, cells=cells, minutes=hw.minutes if hw else 0)
+
+
+def habit_rows(session: Session, week: Week) -> list[HabitRow]:
+    habits = session.exec(select(Habit).where(Habit.active == True).order_by(Habit.id)).all()  # noqa: E712
+    return [habit_row(session, h, week) for h in habits]
+
+
+def log_habit(session: Session, habit: Habit, d: date, action: str) -> HabitLog:
+    """action: 'toggle' (check habits), 'inc' / 'dec' (counter habits)."""
+    log = session.exec(select(HabitLog).where(HabitLog.habit_id == habit.id, HabitLog.day == d)).first()
+    if log is None:
+        log = HabitLog(habit_id=habit.id, day=d, value=0)
+    if action == "toggle":
+        log.value = 0 if log.value else 1
+    elif action == "inc":
+        log.value = min(log.value + 1, 99)
+    elif action == "dec":
+        log.value = max(log.value - 1, 0)
+    else:
+        raise ValueError(action)
+    session.add(log)
+    session.commit()
+    session.refresh(log)
+    return log
+
+
+def set_habit_minutes(session: Session, habit: Habit, week: Week, minutes: int) -> None:
+    hw = session.exec(
+        select(HabitWeek).where(HabitWeek.habit_id == habit.id, HabitWeek.week_id == week.id)
+    ).first() or HabitWeek(habit_id=habit.id, week_id=week.id)
+    hw.minutes = minutes
+    session.add(hw)
+    session.commit()

@@ -1,0 +1,37 @@
+{% set h = row.habit %}
+<tr id="habit-{{ h.id }}" class="habit kind-{{ h.kind.value }}">
+  <th scope="row"><span class="emoji" aria-hidden="true">{{ h.emoji }}</span> {{ h.name }}</th>
+  {% for c in row.cells %}
+  <td class="cell{% if c.met %} met{% endif %}{% if c.future %} future{% endif %}">
+    {% if h.kind.value == "check" %}
+    <button class="hcheck" hx-post="/habits/{{ h.id }}/log" hx-vals='{"day": "{{ c.day.isoformat() }}", "action": "toggle"}'
+            hx-target="#habit-{{ h.id }}" hx-swap="outerHTML" {% if c.future %}disabled{% endif %}
+            aria-pressed="{{ 'true' if c.met else 'false' }}"
+            aria-label="{{ h.name }} em {{ c.day.strftime('%d/%m') }}">{% if c.met %}✓{% endif %}</button>
+    {% else %}
+    <button class="hcount" hx-post="/habits/{{ h.id }}/log" hx-vals='{"day": "{{ c.day.isoformat() }}", "action": "inc"}'
+            hx-target="#habit-{{ h.id }}" hx-swap="outerHTML" {% if c.future %}disabled{% endif %}
+            aria-label="+1 {{ h.name }} em {{ c.day.strftime('%d/%m') }} (agora {{ c.value }} de {{ h.daily_target }})">{{ c.value if c.value or not c.future else "" }}</button>
+    {% if c.value and not c.future %}
+    <button class="hminus" hx-post="/habits/{{ h.id }}/log" hx-vals='{"day": "{{ c.day.isoformat() }}", "action": "dec"}'
+            hx-target="#habit-{{ h.id }}" hx-swap="outerHTML" aria-label="−1 {{ h.name }} em {{ c.day.strftime('%d/%m') }}">−</button>
+    {% endif %}
+    {% endif %}
+  </td>
+  {% endfor %}
+  <td class="sum" title="Dias cumpridos">{{ row.days_met }}/7</td>
+  <td class="minutes">
+    {% if h.kind.value == "check" %}
+    <div class="min-field">
+      <input type="number" name="minutes" min="0" max="10080" step="5" inputmode="numeric"
+             value="{{ row.minutes or '' }}" placeholder="0" aria-label="Minutos de {{ h.name }} na semana"
+             hx-post="/habits/{{ h.id }}/minutes" hx-vals='{"week_id": {{ row.week.id }}}'
+             hx-trigger="input changed delay:800ms, change"
+             hx-target="next .saved" hx-swap="innerHTML">
+      <span class="saved" aria-live="polite"></span>
+    </div>
+    {% else %}
+    <small class="target">meta {{ h.daily_target }}/dia</small>
+    {% endif %}
+  </td>
+</tr>

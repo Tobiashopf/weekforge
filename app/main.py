@@ -12,9 +12,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
+from app import db as _db
 from app.db import get_session, init_db
-from app.models import RecurringTask, Task, Week
+from app.models import Habit, HabitKind, RecurringTask, Task, Week
 from app.services import (
+    habit_row,
+    habit_rows,
+    log_habit,
+    seed_default_habits,
+    set_habit_minutes,
     WEEKDAY_LETTERS,
     carry_over,
     create_rule,
@@ -35,6 +41,8 @@ templates = Jinja2Templates(directory=BASE / "templates")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    with Session(_db.engine) as session:
+        seed_default_habits(session)
     yield
 
 
@@ -62,6 +70,7 @@ def week_view(request: Request, day: date, session: Session = Depends(get_sessio
             "by_day": by_day,
             "backlog": backlog,
             "perf": week_performance(session, week),
+            "habit_rows": habit_rows(session, week),
             "prev_week": week.start_date - timedelta(days=7),
             "next_week": week.start_date + timedelta(days=7),
         },
@@ -339,3 +348,123 @@ def recurring_delete(rule_id: int, session: Session = Depends(get_session)):
         raise HTTPException(404)
     delete_rule(session, rule)
     return RedirectResponse("/recurring", status_code=303)
+
+
+# --- habits ---------------------------------------------------------------------
+
+
+def _get_habit(session: Session, habit_id: int) -> Habit:
+    habit = session.get(Habit, habit_id)
+    if habit is None:
+        raise HTTPException(404)
+    return habit
+
+
+@app.post("/habits/{habit_id}/log", response_class=HTMLResponse)
+def habit_log(
+    request: Request,
+    habit_id: int,
+    day: date = Form(...),
+    action: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    habit = _get_habit(session, habit_id)
+    allowed = {"toggle"} if habit.kind == HabitKind.check else {"inc", "dec"}
+    if action not in allowed:
+        raise HTTPException(422, "Invalid action for this habit")
+    if day > today():
+        raise HTTPException(422, "Cannot log a future day")
+    log_habit(session, habit, day, action)
+    week = get_or_create_week(session, day)
+    return templates.TemplateResponse(
+        request, "partials/habit_row.html", {"row": habit_row(session, habit, week)}
+    )
+
+
+@app.post("/habits/{habit_id}/minutes", response_class=HTMLResponse)
+def habit_minutes(
+    habit_id: int,
+    week_id: int = Form(...),
+    minutes: str = Form("0"),
+    session: Session = Depends(get_session),
+):
+    habit = _get_habit(session, habit_id)
+    week = session.get(Week, week_id)
+    if week is None:
+        raise HTTPException(404)
+    try:
+        value = int(minutes or 0)
+    except ValueError:
+        raise HTTPException(422, "Minutes must be a number")
+    if not 0 <= value <= 7 * 24 * 60:
+        raise HTTPException(422, "Minutes out of range")
+    set_habit_minutes(session, habit, week, value)
+    return HTMLResponse("✓")
+
+
+def _habits_page(request: Request, session: Session, error: str = "", status_code: int = 200):
+    habits = session.exec(select(Habit).order_by(Habit.active.desc(), Habit.id)).all()
+    return templates.TemplateResponse(
+        request,
+        "habits.html",
+        {"habits": habits, "error": error, "this_week": today().isoformat()},
+        status_code=status_code,
+    )
+
+
+def _habit_fields(form) -> tuple[str, str, int]:
+    name = str(form.get("name", "")).strip()
+    emoji = str(form.get("emoji", "")).strip()[:4]
+    try:
+        target = int(form.get("daily_target") or 1)
+    except ValueError:
+        target = 0
+    if not name or len(name) > 60 or not 1 <= target <= 99:
+        raise ValueError("Nome (até 60 caracteres) e meta entre 1 e 99.")
+    return name, emoji, target
+
+
+@app.get("/habits", response_class=HTMLResponse)
+def habits_list(request: Request, session: Session = Depends(get_session)):
+    return _habits_page(request, session)
+
+
+@app.post("/habits", response_class=HTMLResponse)
+async def habits_create(request: Request, session: Session = Depends(get_session)):
+    form = await request.form()
+    try:
+        name, emoji, target = _habit_fields(form)
+        kind = HabitKind(str(form.get("kind", "check")))
+    except ValueError as e:
+        msg = str(e) if "Nome" in str(e) else "Tipo inválido."
+        return _habits_page(request, session, error=msg, status_code=422)
+    session.add(Habit(name=name, emoji=emoji, kind=kind,
+                      daily_target=target if kind == HabitKind.counter else 1))
+    session.commit()
+    return RedirectResponse("/habits", status_code=303)
+
+
+@app.post("/habits/{habit_id}", response_class=HTMLResponse)
+async def habits_update(request: Request, habit_id: int, session: Session = Depends(get_session)):
+    habit = _get_habit(session, habit_id)
+    form = await request.form()
+    try:
+        habit.name, habit.emoji, target = _habit_fields(form)
+    except ValueError as e:
+        session.rollback()
+        return _habits_page(request, session, error=str(e), status_code=422)
+    if habit.kind == HabitKind.counter:
+        habit.daily_target = target
+    session.add(habit)
+    session.commit()
+    return RedirectResponse("/habits", status_code=303)
+
+
+@app.post("/habits/{habit_id}/archive", response_class=HTMLResponse)
+def habits_archive(habit_id: int, session: Session = Depends(get_session)):
+    """Toggle archived/active. Archived habits leave the grid but keep their history."""
+    habit = _get_habit(session, habit_id)
+    habit.active = not habit.active
+    session.add(habit)
+    session.commit()
+    return RedirectResponse("/habits", status_code=303)

@@ -13,6 +13,7 @@
 </form>
 
 <div class="layout">
+  <div class="main-col">
   <section class="agenda">
     {% for label, d in days %}
     <article class="day" data-drop-day="{{ d.isoformat() }}">
@@ -25,6 +26,8 @@
     </article>
     {% endfor %}
   </section>
+  {% include "partials/habits_grid.html" %}
+  </div>
 
   <aside class="side">
     {% include "partials/performance.html" %}

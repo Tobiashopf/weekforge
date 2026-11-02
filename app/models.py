@@ -47,16 +47,26 @@ class RecurringTask(SQLModel, table=True):
 
 
 class HabitKind(str, Enum):
-    check = "check"      # done / not done, optionally with minutes
-    counter = "counter"  # e.g. glasses of water
+    check = "check"      # done / not done per day, plus weekly minutes
+    counter = "counter"  # a count per day against a daily target, e.g. glasses of water
 
 
 class Habit(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
+    emoji: str = ""
     kind: HabitKind = HabitKind.check
-    daily_target: int = 1  # counter target, or minutes goal for check habits
-    active: bool = True
+    daily_target: int = 1  # counter: target per day; check: always 1
+    active: bool = True  # archived habits keep their history but leave the grid
+
+
+class HabitWeek(SQLModel, table=True):
+    """Weekly time spent on a check habit (the paper planner's 'TEMPO' field)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    habit_id: int = Field(foreign_key="habit.id", index=True)
+    week_id: int = Field(foreign_key="week.id", index=True)
+    minutes: int = 0
 
 
 class HabitLog(SQLModel, table=True):

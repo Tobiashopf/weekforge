@@ -1,0 +1,22 @@
+<section class="card habits">
+  <h2>Controle de hábitos <a href="/habits" class="manage">editar</a></h2>
+  {% if habit_rows %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col"><span class="sr-only">Hábito</span></th>
+          {% for label, d in days %}<th scope="col" title="{{ d.strftime('%d/%m') }}">{{ label[0] }}</th>{% endfor %}
+          <th scope="col">Semana</th>
+          <th scope="col">Tempo (min)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in habit_rows %}{% include "partials/habit_row.html" %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="hint">Nenhum hábito ativo. <a href="/habits">Adicionar</a></p>
+  {% endif %}
+</section>

@@ -341,6 +341,8 @@ def test_migration_adds_carried_column_to_old_database(tmp_path):
         assert {"carried", "recurring_id"} <= cols
         week_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(week)")}
         assert "reminders" in week_cols
+        habit_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(habit)")}
+        assert "emoji" in habit_cols or not habit_cols
         assert conn.exec_driver_sql("SELECT carried FROM task").scalar() == 0
 
 
@@ -500,3 +502,124 @@ def test_text_belongs_to_its_week(client):
 def test_invalid_text_requests(client, week_id, data, status):
     client.get("/week/2026-11-01")
     assert client.post(f"/week/{week_id}/text", data=data).status_code == status
+
+
+# --- habits -----------------------------------------------------------------------
+
+def _habit_ids(client):
+    page = client.get("/habits").text
+    return {name: int(page.split(f'value="{name}"')[0].rsplit('action="/habits/', 1)[1].split('"')[0])
+            for name in ["Meditação", "Água"]}
+
+
+def _row(page: str, habit_id: int) -> str:
+    return page.split(f'id="habit-{habit_id}"')[1].split("</tr>")[0]
+
+
+def test_default_habits_seeded_once(client):
+    page = client.get("/week/2026-11-01").text
+    for name in ["Meditação", "Leitura", "Atividade física", "Inglês", "Estudar", "Água"]:
+        assert name in page
+    from app.services import seed_default_habits
+    with Session(db.engine) as s:
+        seed_default_habits(s)  # second call is a no-op
+    assert client.get("/habits").text.count('class="habit-edit"') == 6
+
+
+def test_check_habit_toggle_and_summary(client, today_is):
+    today_is("2026-11-04")
+    ids = _habit_ids(client)
+    for d in ["2026-11-02", "2026-11-03"]:
+        r = client.post(f"/habits/{ids['Meditação']}/log", data={"day": d, "action": "toggle"})
+        assert r.status_code == 200
+    assert "2/7" in r.text and r.text.count("cell met") == 2
+    r = client.post(f"/habits/{ids['Meditação']}/log", data={"day": "2026-11-03", "action": "toggle"})
+    assert "1/7" in r.text  # toggled off again
+
+
+def test_counter_habit_inc_dec_and_target(client, today_is):
+    today_is("2026-11-04")
+    agua = _habit_ids(client)["Água"]
+    client.get("/week/2026-11-01")
+    for _ in range(8):
+        r = client.post(f"/habits/{agua}/log", data={"day": "2026-11-04", "action": "inc"})
+    assert "cell met" in r.text and "1/7" in r.text
+    r = client.post(f"/habits/{agua}/log", data={"day": "2026-11-04", "action": "dec"})
+    assert "cell met" not in r.text and "0/7" in r.text
+    for _ in range(20):
+        r = client.post(f"/habits/{agua}/log", data={"day": "2026-11-03", "action": "dec"})
+    assert r.status_code == 200  # never below zero
+
+
+@pytest.mark.parametrize("name, action", [("Meditação", "inc"), ("Água", "toggle"), ("Água", "explode")])
+def test_wrong_action_for_kind_is_422(client, today_is, name, action):
+    today_is("2026-11-04")
+    hid = _habit_ids(client)[name]
+    assert client.post(f"/habits/{hid}/log", data={"day": "2026-11-04", "action": action}).status_code == 422
+
+
+def test_future_days_are_locked(client, today_is):
+    today_is("2026-11-04")
+    ids = _habit_ids(client)
+    r = client.post(f"/habits/{ids['Meditação']}/log", data={"day": "2026-11-05", "action": "toggle"})
+    assert r.status_code == 422
+    row = _row(client.get("/week/2026-11-01").text, ids["Meditação"])
+    assert row.count("disabled") == 3  # Thu, Fri, Sat
+
+
+def test_weekly_minutes_saved_per_week(client):
+    client.get("/week/2026-11-01")
+    client.get("/week/2026-11-08")
+    med = _habit_ids(client)["Meditação"]
+    assert client.post(f"/habits/{med}/minutes", data={"week_id": 1, "minutes": "70"}).status_code == 200
+    client.post(f"/habits/{med}/minutes", data={"week_id": 1, "minutes": "90"})  # update, not duplicate
+    assert 'value="90"' in _row(client.get("/week/2026-11-01").text, med)
+    assert 'value="90"' not in _row(client.get("/week/2026-11-08").text, med)
+
+
+@pytest.mark.parametrize("minutes", ["-5", "99999", "abc"])
+def test_invalid_minutes_rejected(client, minutes):
+    client.get("/week/2026-11-01")
+    med = _habit_ids(client)["Meditação"]
+    assert client.post(f"/habits/{med}/minutes", data={"week_id": 1, "minutes": minutes}).status_code == 422
+
+
+def test_create_rename_and_archive_habit(client):
+    r = client.post("/habits", data={"name": "Alongamento", "emoji": "🤸", "kind": "check"}, follow_redirects=False)
+    assert r.status_code == 303
+    page = client.get("/habits").text
+    new_id = int(page.split('value="Alongamento"')[0].rsplit('action="/habits/', 1)[1].split('"')[0])
+    assert "Alongamento" in client.get("/week/2026-11-01").text
+
+    client.post(f"/habits/{new_id}", data={"name": "Alongar", "emoji": "🤸"})
+    assert "Alongar" in client.get("/week/2026-11-01").text
+
+    client.post(f"/habits/{new_id}/archive")
+    assert "Alongar" not in client.get("/week/2026-11-01").text   # gone from the grid
+    assert "Reativar" in client.get("/habits").text                # still listed, can come back
+    client.post(f"/habits/{new_id}/archive")
+    assert "Alongar" in client.get("/week/2026-11-01").text
+
+
+def test_counter_target_can_be_changed(client, today_is):
+    today_is("2026-11-04")
+    agua = _habit_ids(client)["Água"]
+    client.post(f"/habits/{agua}", data={"name": "Água", "emoji": "💧", "daily_target": "2"})
+    client.get("/week/2026-11-01")
+    client.post(f"/habits/{agua}/log", data={"day": "2026-11-04", "action": "inc"})
+    r = client.post(f"/habits/{agua}/log", data={"day": "2026-11-04", "action": "inc"})
+    assert "cell met" in r.text
+
+
+@pytest.mark.parametrize(
+    "data",
+    [{"name": "", "kind": "check"}, {"name": "x" * 61, "kind": "check"},
+     {"name": "Água 2", "kind": "counter", "daily_target": "0"}, {"name": "Y", "kind": "weird"}],
+)
+def test_invalid_habit_rejected(client, data):
+    assert client.post("/habits", data=data).status_code == 422
+
+
+def test_habit_name_is_escaped(client):
+    client.post("/habits", data={"name": "<b>x</b>", "kind": "check"})
+    assert "<b>x</b>" not in client.get("/week/2026-11-01").text

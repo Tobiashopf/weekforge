@@ -17,11 +17,11 @@ Estimates are rough and only meant to size the work.
 - [x] Recurring tasks (every weekday, every Monday…)
 - [x] Week notes and weekly reminders fields (autosave)
 
-## v0.3 — Habits (~5h)
-- [ ] Habit settings: name, type (check / counter), daily target, active
-- [ ] Habit grid for the week (one cell per day)
-- [ ] Minutes per check habit; +1 / −1 for counters (water)
-- [ ] Default habit set on first run, fully editable
+## v0.3 — Habits (done)
+- [x] Habit settings: name, emoji, type (check / counter), daily target, archive
+- [x] Habit grid for the week (one cell per day, future days locked)
+- [x] Weekly minutes per check habit; +1 / −1 for counters (water)
+- [x] Default habit set on first run, fully editable
 
 ## v0.4 — Metrics (~5h)
 - [ ] Dashboard: completion rate per week over time

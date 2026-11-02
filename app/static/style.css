@@ -121,3 +121,44 @@ textarea { font: inherit; color: inherit; background: var(--card); border: 1px s
 .week-text h2 label { cursor: text; }
 .status { display: block; min-height: 1.2em; margin-top: 4px; font-size: .75rem; color: var(--muted); }
 .agenda { align-content: start; }
+
+/* habits grid */
+.main-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.habits h2 { display: flex; justify-content: space-between; align-items: baseline; }
+.manage { font-size: .8rem; font-weight: 400; color: var(--muted) !important; }
+.table-wrap { overflow-x: auto; }
+.habits table { border-collapse: collapse; width: 100%; min-width: 520px; }
+.habits th, .habits td { padding: 4px; text-align: center; }
+.habits thead th { font-size: .8rem; color: var(--muted); font-weight: 600; }
+.habits tbody th { text-align: left; font-weight: 500; white-space: nowrap; padding-right: 10px; }
+.habits tbody tr + tr { border-top: 1px solid var(--line); }
+.cell { position: relative; width: 44px; }
+.hcheck, .hcount { width: 32px; height: 32px; border-radius: 8px; border: 2px solid var(--line);
+                   background: transparent; color: var(--accent); font: inherit; font-weight: 800; cursor: pointer; }
+.hcount { color: var(--ink); font-variant-numeric: tabular-nums; }
+.cell.met .hcheck, .cell.met .hcount { background: var(--accent); border-color: var(--accent); color: var(--card); }
+.cell.future button { opacity: .35; cursor: not-allowed; }
+.hminus { position: absolute; top: 0; right: 0; width: 16px; height: 16px; line-height: 14px; padding: 0;
+          border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--muted);
+          font-size: .75rem; cursor: pointer; }
+.sum { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.minutes .min-field { display: flex; align-items: center; gap: 4px; justify-content: center; }
+.minutes input { width: 70px; padding: 4px 6px; text-align: right; }
+.saved { width: 1em; color: var(--accent); font-size: .8rem; }
+.target { color: var(--muted); white-space: nowrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* habits page */
+.row2 { display: flex; gap: 6px; }
+.emoji-input { width: 3.2rem; flex: none; text-align: center; }
+.kind { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+.kind legend { font-size: .85rem; color: var(--muted); margin-bottom: 4px; }
+.target-input { width: 4rem; padding: 3px 6px; }
+.habits-list li { gap: 6px; }
+.habit-edit { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.habit-edit input[name=name] { flex: 1; min-width: 0; }
+.inline { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: .85rem; white-space: nowrap; }
+.habits-list li.archived { opacity: .55; }
+.link { background: none; border: 0; color: var(--muted); font: inherit; font-size: .85rem; cursor: pointer; text-decoration: underline; }
+input[type=radio], input[type=checkbox] { width: auto; padding: 0; margin: 0 6px 0 0; accent-color: var(--accent); }
+.kind label { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Hábitos · Weekforge{% endblock %}
+{% block content %}
+<section class="week-head"><h1>Hábitos</h1></section>
+<p class="hint">Hábitos de <strong>check</strong> marcam o dia feito e somam o tempo da semana.
+  Hábitos de <strong>contador</strong> (como água) somam por dia até a meta. Arquivar tira da grade, mas mantém o histórico.</p>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+
+<div class="layout recurring">
+  <section class="card">
+    <h2>Novo hábito</h2>
+    <form method="post" action="/habits" class="rule-form">
+      <div class="row2">
+        <input name="emoji" maxlength="4" placeholder="🙂" aria-label="Emoji (opcional)" class="emoji-input">
+        <input name="name" required maxlength="60" placeholder="ex.: Alongamento" aria-label="Nome">
+      </div>
+      <fieldset class="kind">
+        <legend>Tipo</legend>
+        <label><input type="radio" name="kind" value="check" checked> Check (feito / não feito)</label>
+        <label><input type="radio" name="kind" value="counter"> Contador, meta por dia:
+          <input type="number" name="daily_target" min="1" max="99" value="8" class="target-input" aria-label="Meta por dia"></label>
+      </fieldset>
+      <button type="submit" class="save">Adicionar</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Seus hábitos</h2>
+    <ul class="rules habits-list">
+      {% for h in habits %}
+      <li class="{{ '' if h.active else 'archived' }}">
+        <form method="post" action="/habits/{{ h.id }}" class="habit-edit">
+          <input name="emoji" value="{{ h.emoji }}" maxlength="4" class="emoji-input" aria-label="Emoji de {{ h.name }}">
+          <input name="name" value="{{ h.name }}" required maxlength="60" aria-label="Nome">
+          {% if h.kind.value == "counter" %}
+          <label class="inline">meta <input type="number" name="daily_target" min="1" max="99" value="{{ h.daily_target }}" class="target-input"></label>
+          {% else %}<small class="days">check</small>{% endif %}
+          <button class="icon" title="Salvar" aria-label="Salvar {{ h.name }}">✓</button>
+        </form>
+        <form method="post" action="/habits/{{ h.id }}/archive">
+          <button class="link">{{ "Arquivar" if h.active else "Reativar" }}</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    <p><a href="/week/{{ this_week }}">← Voltar para a semana</a></p>
+  </section>
+</div>
+{% endblock %}

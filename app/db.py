@@ -15,6 +15,7 @@ _ADDED_COLUMNS = [
     ("task", "carried", "BOOLEAN NOT NULL DEFAULT 0"),
     ("task", "recurring_id", "INTEGER"),
     ("week", "reminders", "VARCHAR NOT NULL DEFAULT ''"),
+    ("habit", "emoji", "VARCHAR NOT NULL DEFAULT ''"),
 ]
 
 
